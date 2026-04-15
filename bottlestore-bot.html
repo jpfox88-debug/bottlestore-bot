@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sofia — The Bottle Store</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script type="module" src="https://cdn.simli.com/simli-widget.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface2: #181818;
+    --border: rgba(255,255,255,0.07);
+    --gold: #c9a84c;
+    --gold-dim: rgba(201,168,76,0.15);
+    --gold-glow: rgba(201,168,76,0.06);
+    --text: #f0ece4;
+    --text-dim: rgba(240,236,228,0.45);
+    --text-muted: rgba(240,236,228,0.25);
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    font-size: 15px;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* HEADER */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    opacity: 0.3;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-logo {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--gold-dim); border: 1px solid rgba(201,168,76,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cormorant Garamond', serif; font-size: 16px; color: var(--gold);
+  }
+  .brand-text { display: flex; flex-direction: column; gap: 1px; }
+  .brand-name { font-family: 'Cormorant Garamond', serif; font-size: 17px; font-weight: 400; letter-spacing: 0.5px; line-height: 1; }
+  .brand-sub { font-size: 10px; color: var(--gold); letter-spacing: 2px; text-transform: uppercase; line-height: 1; }
+  .header-controls { display: flex; align-items: center; gap: 10px; }
+  .warehouse-select {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text-dim); font-family: 'DM Sans', sans-serif;
+    font-size: 12px; font-weight: 300; padding: 6px 10px;
+    border-radius: 6px; cursor: pointer; outline: none;
+  }
+  .warehouse-select:focus { border-color: rgba(201,168,76,0.3); color: var(--text); }
+  .warehouse-select option { background: #1a1a1a; }
+
+  /* MODE TOGGLE */
+  .mode-toggle {
+    display: flex; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  .mode-btn {
+    padding: 6px 13px; font-family: 'DM Sans', sans-serif;
+    font-size: 11px; font-weight: 400; letter-spacing: 0.5px;
+    color: var(--text-muted); background: none; border: none;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .mode-btn.active { background: var(--gold-dim); color: var(--gold); }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #4caf78; box-shadow: 0 0 6px rgba(76,175,120,0.6);
+    animation: pulse 2.5s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* MAIN */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+  /* CHAT */
+  #chatMode { display: flex; flex-direction: column; height: 100%; }
+  .messages {
+    flex: 1; overflow-y: auto; padding: 28px 20px;
+    display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth;
+  }
+  .messages::-webkit-scrollbar { width: 4px; }
+  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .message-row {
+    display: flex; gap: 10px;
+    opacity: 0; transform: translateY(8px);
+    animation: fadeUp 0.35s ease forwards;
+  }
+  @keyframes fadeUp { to { opacity:1; transform:translateY(0); } }
+  .message-row.user { flex-direction: row-reverse; }
+  .av {
+    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; margin-top: 2px;
+  }
+  .av.sofia { background: var(--gold-dim); border: 1px solid rgba(201,168,76,0.25); color: var(--gold); font-family: 'Cormorant Garamond', serif; }
+  .av.you { background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim); font-size: 11px; }
+  .bubble-wrap { max-width: 72%; display: flex; flex-direction: column; gap: 10px; }
+  .message-row.user .bubble-wrap { align-items: flex-end; }
+  .bubble { padding: 13px 16px; border-radius: var(--radius); line-height: 1.65; font-size: 14.5px; font-weight: 300; }
+  .message-row.bot .bubble { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px var(--radius) var(--radius) var(--radius); }
+  .message-row.user .bubble { background: var(--gold-dim); border: 1px solid rgba(201,168,76,0.2); border-radius: var(--radius) 4px var(--radius) var(--radius); }
+
+  /* PRODUCT CARDS */
+  .product-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+  .product-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px 14px;
+    min-width: 175px; max-width: 215px; position: relative; overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .product-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--gold), transparent); opacity: 0.6;
+  }
+  .product-card:hover { border-color: rgba(201,168,76,0.25); transform: translateY(-1px); }
+  .card-category { font-size: 9px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); margin-bottom: 5px; opacity: 0.8; }
+  .card-name { font-family: 'Cormorant Garamond', serif; font-size: 15px; font-weight: 400; line-height: 1.3; margin-bottom: 8px; }
+  .card-footer { display: flex; align-items: center; justify-content: space-between; }
+  .card-price { font-size: 15px; font-weight: 500; color: var(--gold); }
+  .card-stock { font-size: 10px; color: var(--text-muted); letter-spacing: 0.5px; }
+
+  /* TYPING */
+  .typing-indicator { display: flex; align-items: center; gap: 5px; padding: 13px 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px var(--radius) var(--radius) var(--radius); width: fit-content; }
+  .typing-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--gold); opacity: 0.4; animation: typingBounce 1.2s ease-in-out infinite; }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typingBounce { 0%,80%,100%{transform:translateY(0);opacity:0.4} 40%{transform:translateY(-5px);opacity:1} }
+
+  /* WELCOME */
+  .welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; text-align: center; gap: 14px; opacity: 0; animation: fadeUp 0.6s 0.2s ease forwards; }
+  .welcome-icon { width: 60px; height: 60px; border-radius: 50%; background: var(--gold-dim); border: 1px solid rgba(201,168,76,0.25); display: flex; align-items: center; justify-content: center; font-family: 'Cormorant Garamond', serif; font-size: 26px; color: var(--gold); margin-bottom: 4px; }
+  .welcome h2 { font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 400; letter-spacing: 0.5px; }
+  .welcome p { font-size: 14px; font-weight: 300; color: var(--text-dim); max-width: 320px; line-height: 1.6; }
+  .suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
+  .suggestion { background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim); font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 300; padding: 8px 14px; border-radius: 20px; cursor: pointer; transition: all 0.2s; }
+  .suggestion:hover { border-color: rgba(201,168,76,0.3); color: var(--text); background: var(--gold-glow); }
+
+  /* AVATAR MODE */
+  #avatarMode {
+    display: none; flex-direction: column; align-items: center;
+    justify-content: center; height: 100%; padding: 32px 24px; gap: 20px;
+  }
+  #avatarMode.visible { display: flex; }
+  .avatar-frame {
+    width: 100%; max-width: 380px; aspect-ratio: 3/4;
+    border-radius: 20px; overflow: hidden;
+    border: 1px solid rgba(201,168,76,0.2);
+    background: var(--surface2);
+    box-shadow: 0 0 40px rgba(201,168,76,0.05);
+  }
+  .avatar-label { font-family: 'Cormorant Garamond', serif; font-size: 13px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text-muted); }
+  .avatar-hint { font-size: 13px; font-weight: 300; color: var(--text-dim); text-align: center; max-width: 280px; line-height: 1.6; }
+
+  /* INPUT */
+  .input-area {
+    padding: 16px 20px 20px; border-top: 1px solid var(--border);
+    background: var(--surface); flex-shrink: 0; position: relative;
+  }
+  .input-area::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); opacity: 0.2; }
+  .input-row { display: flex; align-items: flex-end; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; transition: border-color 0.2s; }
+  .input-row:focus-within { border-color: rgba(201,168,76,0.3); }
+  textarea { flex: 1; background: none; border: none; outline: none; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14.5px; font-weight: 300; line-height: 1.5; resize: none; min-height: 22px; max-height: 120px; overflow-y: auto; }
+  textarea::placeholder { color: var(--text-muted); }
+  .send-btn { width: 34px; height: 34px; border-radius: 8px; background: var(--gold); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; opacity: 0.9; }
+  .send-btn:hover { opacity: 1; transform: scale(1.04); }
+  .send-btn:active { transform: scale(0.97); }
+  .send-btn:disabled { opacity: 0.3; cursor: default; transform: none; }
+  .input-hint { text-align: center; font-size: 10.5px; color: var(--text-muted); margin-top: 8px; letter-spacing: 0.3px; }
+
+  * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+  @media (max-width: 480px) {
+    .header { padding: 14px 16px; }
+    .messages { padding: 20px 14px; }
+    .input-area { padding: 12px 14px 16px; }
+    .bubble-wrap { max-width: 88%; }
+    .welcome h2 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="brand">
+    <div class="brand-logo">S</div>
+    <div class="brand-text">
+      <div class="brand-name">Sofia</div>
+      <div class="brand-sub">The Bottle Store</div>
+    </div>
+  </div>
+  <div class="header-controls">
+    <select class="warehouse-select" id="warehouseSelect">
+      <option value="">Select area</option>
+      <option value="abu_dhabi">Abu Dhabi</option>
+      <option value="dubai">Dubai</option>
+    </select>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="btnChat" onclick="setMode('chat')">💬 Chat</button>
+      <button class="mode-btn" id="btnAvatar" onclick="setMode('avatar')">🎭 Avatar</button>
+    </div>
+    <div class="status-dot"></div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- CHAT -->
+  <div id="chatMode">
+    <div class="messages" id="messages">
+      <div class="welcome" id="welcome">
+        <div class="welcome-icon">✦</div>
+        <h2>Hello, I'm Sofia</h2>
+        <p>Your personal sommelier for The Bottle Store. Ask me anything about wines, spirits, beers or your order.</p>
+        <div class="suggestions">
+          <div class="suggestion" onclick="sendSuggestion(this)">Recommend a red wine under AED 100</div>
+          <div class="suggestion" onclick="sendSuggestion(this)">Best gin for a G&T?</div>
+          <div class="suggestion" onclick="sendSuggestion(this)">Something for a celebration</div>
+          <div class="suggestion" onclick="sendSuggestion(this)">How fast is delivery?</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AVATAR -->
+  <div id="avatarMode">
+    <div class="avatar-label">Live with Sofia</div>
+    <div class="avatar-frame">
+      <simli-widget
+        token="rwq4j9njja9lg0q9d45b9"
+        agentid="d2a5c7c6-fed9-4f55-bcb3-062f7cd20103"
+        position="relative"
+        overlay="false"
+        customtext="Speak with Sofia"
+      ></simli-widget>
+    </div>
+    <div class="avatar-hint">Tap above to start a live voice conversation with Sofia — she can recommend products and answer any questions.</div>
+  </div>
+
+</div>
+
+<div class="input-area" id="inputArea">
+  <div class="input-row">
+    <textarea id="messageInput" placeholder="Ask Sofia anything…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"></line>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+      </svg>
+    </button>
+  </div>
+  <div class="input-hint">21+ only · Delivery across Abu Dhabi & Dubai</div>
+</div>
+
+<script>
+  const API_URL = 'https://bottlestore-bot.onrender.com/api/bot/message';
+  const sessionId = 'session_' + Math.random().toString(36).slice(2);
+  let isLoading = false;
+
+  function setMode(mode) {
+    const chat = document.getElementById('chatMode');
+    const avatar = document.getElementById('avatarMode');
+    const inputArea = document.getElementById('inputArea');
+    const btnChat = document.getElementById('btnChat');
+    const btnAvatar = document.getElementById('btnAvatar');
+    if (mode === 'avatar') {
+      chat.style.display = 'none';
+      avatar.classList.add('visible');
+      inputArea.style.display = 'none';
+      btnChat.classList.remove('active');
+      btnAvatar.classList.add('active');
+    } else {
+      chat.style.display = 'flex';
+      avatar.classList.remove('visible');
+      inputArea.style.display = 'block';
+      btnChat.classList.add('active');
+      btnAvatar.classList.remove('active');
+    }
+  }
+
+  const input = document.getElementById('messageInput');
+  const sendBtn = document.getElementById('sendBtn');
+  input.addEventListener('input', () => { sendBtn.disabled = input.value.trim() === '' || isLoading; });
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sendBtn.disabled) sendMessage(); }
+  }
+
+  function sendSuggestion(el) {
+    input.value = el.textContent;
+    autoResize(input);
+    sendBtn.disabled = false;
+    sendMessage();
+  }
+
+  async function sendMessage() {
+    const message = input.value.trim();
+    if (!message || isLoading) return;
+    const warehouse = document.getElementById('warehouseSelect').value;
+    const welcome = document.getElementById('welcome');
+    if (welcome) welcome.style.display = 'none';
+    appendMessage('user', message);
+    input.value = '';
+    input.style.height = 'auto';
+    sendBtn.disabled = true;
+    isLoading = true;
+    const typingId = showTyping();
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, sessionId, warehouse, mode: 'chat' })
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      removeTyping(typingId);
+      appendMessage('bot', data.text, data.products);
+    } catch {
+      removeTyping(typingId);
+      appendMessage('bot', "I'm having a moment — please try again in a few seconds.");
+    }
+    isLoading = false;
+    sendBtn.disabled = input.value.trim() === '';
+  }
+
+  function appendMessage(role, text, products = []) {
+    const container = document.getElementById('messages');
+    const row = document.createElement('div');
+    row.className = `message-row ${role}`;
+    const av = document.createElement('div');
+    av.className = `av ${role === 'bot' ? 'sofia' : 'you'}`;
+    av.textContent = role === 'bot' ? '✦' : 'You';
+    const wrap = document.createElement('div');
+    wrap.className = 'bubble-wrap';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+    if (products && products.length > 0) {
+      const cards = document.createElement('div');
+      cards.className = 'product-cards';
+      products.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'product-card';
+        card.innerHTML = `<div class="card-category">${esc(p.category??'')}</div><div class="card-name">${esc(p.name)}</div><div class="card-footer"><div class="card-price">AED ${p.price}</div><div class="card-stock">${p.stock} in stock</div></div>`;
+        cards.appendChild(card);
+      });
+      wrap.appendChild(cards);
+    }
+    row.appendChild(av);
+    row.appendChild(wrap);
+    container.appendChild(row);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function showTyping() {
+    const c = document.getElementById('messages');
+    const row = document.createElement('div');
+    const id = 'typing_' + Date.now();
+    row.id = id;
+    row.className = 'message-row bot';
+    row.innerHTML = `<div class="av sofia">✦</div><div class="bubble-wrap"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
+    c.appendChild(row);
+    c.scrollTop = c.scrollHeight;
+    return id;
+  }
+
+  function removeTyping(id) { document.getElementById(id)?.remove(); }
+  function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+</script>
+</body>
+</html>
