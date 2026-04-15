@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sofia — The Bottle Store</title>
+<title>Jeffrey — The Bottle Store</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script type="module" src="https://cdn.simli.com/simli-widget.js"></script>
 <style>
@@ -23,35 +23,20 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'DM Sans', sans-serif;
-    font-weight: 300;
-    font-size: 15px;
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-weight: 300; font-size: 15px;
+    height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
   }
 
   /* HEADER */
   .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 18px 24px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-    flex-shrink: 0;
-    position: relative;
-    z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface); flex-shrink: 0; position: relative; z-index: 10;
   }
   .header::after {
-    content: '';
-    position: absolute;
-    bottom: 0; left: 0; right: 0; height: 1px;
-    background: linear-gradient(90deg, transparent, var(--gold), transparent);
-    opacity: 0.3;
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent); opacity: 0.3;
   }
   .brand { display: flex; align-items: center; gap: 12px; }
   .brand-logo {
@@ -63,15 +48,7 @@
   .brand-text { display: flex; flex-direction: column; gap: 1px; }
   .brand-name { font-family: 'Cormorant Garamond', serif; font-size: 17px; font-weight: 400; letter-spacing: 0.5px; line-height: 1; }
   .brand-sub { font-size: 10px; color: var(--gold); letter-spacing: 2px; text-transform: uppercase; line-height: 1; }
-  .header-controls { display: flex; align-items: center; gap: 10px; }
-  .warehouse-select {
-    background: var(--surface2); border: 1px solid var(--border);
-    color: var(--text-dim); font-family: 'DM Sans', sans-serif;
-    font-size: 12px; font-weight: 300; padding: 6px 10px;
-    border-radius: 6px; cursor: pointer; outline: none;
-  }
-  .warehouse-select:focus { border-color: rgba(201,168,76,0.3); color: var(--text); }
-  .warehouse-select option { background: #1a1a1a; }
+  .header-right { display: flex; align-items: center; gap: 10px; }
 
   /* MODE TOGGLE */
   .mode-toggle {
@@ -79,12 +56,12 @@
     border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
   }
   .mode-btn {
-    padding: 6px 13px; font-family: 'DM Sans', sans-serif;
+    padding: 6px 14px; font-family: 'DM Sans', sans-serif;
     font-size: 11px; font-weight: 400; letter-spacing: 0.5px;
-    color: var(--text-muted); background: none; border: none;
-    cursor: pointer; transition: all 0.2s;
+    color: var(--text-muted); background: none; border: none; cursor: pointer; transition: all 0.2s;
   }
   .mode-btn.active { background: var(--gold-dim); color: var(--gold); }
+
   .status-dot {
     width: 7px; height: 7px; border-radius: 50%;
     background: #4caf78; box-shadow: 0 0 6px rgba(76,175,120,0.6);
@@ -93,9 +70,9 @@
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
   /* MAIN */
-  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
-  /* CHAT */
+  /* ── CHAT MODE ── */
   #chatMode { display: flex; flex-direction: column; height: 100%; }
   .messages {
     flex: 1; overflow-y: auto; padding: 28px 20px;
@@ -103,6 +80,7 @@
   }
   .messages::-webkit-scrollbar { width: 4px; }
   .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
   .message-row {
     display: flex; gap: 10px;
     opacity: 0; transform: translateY(8px);
@@ -110,13 +88,14 @@
   }
   @keyframes fadeUp { to { opacity:1; transform:translateY(0); } }
   .message-row.user { flex-direction: row-reverse; }
+
   .av {
     width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; margin-top: 2px;
+    display: flex; align-items: center; justify-content: center; font-size: 13px; margin-top: 2px;
   }
-  .av.sofia { background: var(--gold-dim); border: 1px solid rgba(201,168,76,0.25); color: var(--gold); font-family: 'Cormorant Garamond', serif; }
+  .av.jeffrey { background: var(--gold-dim); border: 1px solid rgba(201,168,76,0.25); color: var(--gold); font-family: 'Cormorant Garamond', serif; }
   .av.you { background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim); font-size: 11px; }
+
   .bubble-wrap { max-width: 72%; display: flex; flex-direction: column; gap: 10px; }
   .message-row.user .bubble-wrap { align-items: flex-end; }
   .bubble { padding: 13px 16px; border-radius: var(--radius); line-height: 1.65; font-size: 14.5px; font-weight: 300; }
@@ -158,21 +137,29 @@
   .suggestion { background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim); font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 300; padding: 8px 14px; border-radius: 20px; cursor: pointer; transition: all 0.2s; }
   .suggestion:hover { border-color: rgba(201,168,76,0.3); color: var(--text); background: var(--gold-glow); }
 
-  /* AVATAR MODE */
+  /* ── AVATAR MODE ── */
   #avatarMode {
     display: none; flex-direction: column; align-items: center;
-    justify-content: center; height: 100%; padding: 32px 24px; gap: 20px;
+    justify-content: center; height: 100%; padding: 28px 24px; gap: 18px;
   }
   #avatarMode.visible { display: flex; }
-  .avatar-frame {
-    width: 100%; max-width: 380px; aspect-ratio: 3/4;
-    border-radius: 20px; overflow: hidden;
-    border: 1px solid rgba(201,168,76,0.2);
-    background: var(--surface2);
-    box-shadow: 0 0 40px rgba(201,168,76,0.05);
-  }
   .avatar-label { font-family: 'Cormorant Garamond', serif; font-size: 13px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text-muted); }
   .avatar-hint { font-size: 13px; font-weight: 300; color: var(--text-dim); text-align: center; max-width: 280px; line-height: 1.6; }
+
+  /* Simli widget wrapper — let widget control its own size */
+  .simli-wrap {
+    width: 100%;
+    max-width: 400px;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid rgba(201,168,76,0.2);
+    box-shadow: 0 0 40px rgba(201,168,76,0.04);
+  }
+
+  simli-widget {
+    display: block;
+    width: 100%;
+  }
 
   /* INPUT */
   .input-area {
@@ -203,20 +190,16 @@
 </head>
 <body>
 
+<!-- HEADER -->
 <div class="header">
   <div class="brand">
     <div class="brand-logo">S</div>
     <div class="brand-text">
-      <div class="brand-name">Sofia</div>
+      <div class="brand-name">Jeffrey</div>
       <div class="brand-sub">The Bottle Store</div>
     </div>
   </div>
-  <div class="header-controls">
-    <select class="warehouse-select" id="warehouseSelect">
-      <option value="">Select area</option>
-      <option value="abu_dhabi">Abu Dhabi</option>
-      <option value="dubai">Dubai</option>
-    </select>
+  <div class="header-right">
     <div class="mode-toggle">
       <button class="mode-btn active" id="btnChat" onclick="setMode('chat')">💬 Chat</button>
       <button class="mode-btn" id="btnAvatar" onclick="setMode('avatar')">🎭 Avatar</button>
@@ -225,6 +208,7 @@
   </div>
 </div>
 
+<!-- MAIN -->
 <div class="main">
 
   <!-- CHAT -->
@@ -232,7 +216,7 @@
     <div class="messages" id="messages">
       <div class="welcome" id="welcome">
         <div class="welcome-icon">✦</div>
-        <h2>Hello, I'm Sofia</h2>
+        <h2>Hello, I'm Jeffrey</h2>
         <p>Your personal sommelier for The Bottle Store. Ask me anything about wines, spirits, beers or your order.</p>
         <div class="suggestions">
           <div class="suggestion" onclick="sendSuggestion(this)">Recommend a red wine under AED 100</div>
@@ -246,24 +230,26 @@
 
   <!-- AVATAR -->
   <div id="avatarMode">
-    <div class="avatar-label">Live with Sofia</div>
-    <div class="avatar-frame">
+    <div class="avatar-label">Live with Jeffrey</div>
+    <div class="simli-wrap">
       <simli-widget
         token="rwq4j9njja9lg0q9d45b9"
         agentid="d2a5c7c6-fed9-4f55-bcb3-062f7cd20103"
         position="relative"
         overlay="false"
-        customtext="Speak with Sofia"
+        customtext="Speak with Jeffrey"
+        customimage="https://app.simli.com/images/logo.png"
       ></simli-widget>
     </div>
-    <div class="avatar-hint">Tap above to start a live voice conversation with Sofia — she can recommend products and answer any questions.</div>
+    <div class="avatar-hint">Tap above to start a live voice conversation with Jeffrey.</div>
   </div>
 
 </div>
 
+<!-- INPUT (chat only) -->
 <div class="input-area" id="inputArea">
   <div class="input-row">
-    <textarea id="messageInput" placeholder="Ask Sofia anything…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+    <textarea id="messageInput" placeholder="Ask Jeffrey anything…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
     <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -276,6 +262,9 @@
 
 <script>
   const API_URL = 'https://bottlestore-bot.onrender.com/api/bot/message';
+  // Warehouse is passed automatically — set this to whatever the app detects
+  // For testing purposes defaults to empty (no filter = all warehouses)
+  const WAREHOUSE = '';
   const sessionId = 'session_' + Math.random().toString(36).slice(2);
   let isLoading = false;
 
@@ -304,39 +293,24 @@
   const sendBtn = document.getElementById('sendBtn');
   input.addEventListener('input', () => { sendBtn.disabled = input.value.trim() === '' || isLoading; });
 
-  function autoResize(el) {
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-  }
-
-  function handleKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sendBtn.disabled) sendMessage(); }
-  }
-
-  function sendSuggestion(el) {
-    input.value = el.textContent;
-    autoResize(input);
-    sendBtn.disabled = false;
-    sendMessage();
-  }
+  function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
+  function handleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sendBtn.disabled) sendMessage(); } }
+  function sendSuggestion(el) { input.value = el.textContent; autoResize(input); sendBtn.disabled = false; sendMessage(); }
 
   async function sendMessage() {
     const message = input.value.trim();
     if (!message || isLoading) return;
-    const warehouse = document.getElementById('warehouseSelect').value;
     const welcome = document.getElementById('welcome');
     if (welcome) welcome.style.display = 'none';
     appendMessage('user', message);
-    input.value = '';
-    input.style.height = 'auto';
-    sendBtn.disabled = true;
-    isLoading = true;
+    input.value = ''; input.style.height = 'auto';
+    sendBtn.disabled = true; isLoading = true;
     const typingId = showTyping();
     try {
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, sessionId, warehouse, mode: 'chat' })
+        body: JSON.stringify({ message, sessionId, warehouse: WAREHOUSE, mode: 'chat' })
       });
       if (!res.ok) throw new Error();
       const data = await res.json();
@@ -351,11 +325,11 @@
   }
 
   function appendMessage(role, text, products = []) {
-    const container = document.getElementById('messages');
+    const c = document.getElementById('messages');
     const row = document.createElement('div');
     row.className = `message-row ${role}`;
     const av = document.createElement('div');
-    av.className = `av ${role === 'bot' ? 'sofia' : 'you'}`;
+    av.className = `av ${role === 'bot' ? 'jeffrey' : 'you'}`;
     av.textContent = role === 'bot' ? '✦' : 'You';
     const wrap = document.createElement('div');
     wrap.className = 'bubble-wrap';
@@ -374,21 +348,17 @@
       });
       wrap.appendChild(cards);
     }
-    row.appendChild(av);
-    row.appendChild(wrap);
-    container.appendChild(row);
-    container.scrollTop = container.scrollHeight;
+    row.appendChild(av); row.appendChild(wrap);
+    c.appendChild(row); c.scrollTop = c.scrollHeight;
   }
 
   function showTyping() {
     const c = document.getElementById('messages');
     const row = document.createElement('div');
     const id = 'typing_' + Date.now();
-    row.id = id;
-    row.className = 'message-row bot';
-    row.innerHTML = `<div class="av sofia">✦</div><div class="bubble-wrap"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
-    c.appendChild(row);
-    c.scrollTop = c.scrollHeight;
+    row.id = id; row.className = 'message-row bot';
+    row.innerHTML = `<div class="av jeffrey">✦</div><div class="bubble-wrap"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
+    c.appendChild(row); c.scrollTop = c.scrollHeight;
     return id;
   }
 
