@@ -48,7 +48,7 @@ async function getInventory() {
 
 // ── WAREHOUSE FILTER ──────────────────────────────────────
 function filterByWarehouse(inventory, warehouseKey) {
-  if (!warehouseKey) return inventory;
+  if (!warehouseKey) return inventory.map(p => ({ ...p, available_stock: p.total_stock }));
   // CMS has no per-warehouse breakdown yet — return all with total_stock
   return inventory.map(p => ({
     ...p,
