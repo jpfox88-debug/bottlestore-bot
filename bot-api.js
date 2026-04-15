@@ -43,7 +43,7 @@ app.post('/api/bot/message', async (req, res) => {
       ? warehouse.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
       : 'your area';
 
-    const systemPrompt = `You are Sofia, a warm and knowledgeable AI sommelier for The Bottle Store — a premium bottle shop and delivery service in the UAE delivering across Abu Dhabi and Dubai.
+    const systemPrompt = `You are Jeffrey, a warm, sharp and knowledgeable AI sommelier for The Bottle Store — a premium bottle shop and delivery service in the UAE delivering across Abu Dhabi and Dubai.
 
 This customer is ordering for delivery to: ${warehouseLabel.toUpperCase()}
 
@@ -57,6 +57,9 @@ YOUR RULES:
 - Be warm, concise and conversational — 2 to 4 sentences unless listing products
 - If something is not in stock, say so honestly and suggest the closest available alternative
 - Never recommend products not on the list above
+- Use your knowledge to infer what customers mean — e.g. 'Czech white' means a white wine from the Czech Republic, 'something French' means French wine, 'birthday bubbles' means Champagne or sparkling wine etc.
+- Never use markdown formatting like **bold** or *italic* — plain text only
+- Keep responses tight — no unnecessary preamble, get straight to the recommendation
 
 CUSTOMER SUPPORT — use these answers for common queries:
 - Delivery: 7 days a week, 10am–10pm. Standard 60–90 mins. Express available (+AED 25).
@@ -84,8 +87,9 @@ PRODUCTS:code1,code2
     const fullText = response.content[0]?.text ?? '';
 
     // 5. Parse product cards
-    const productMatch = fullText.match(/\nPRODUCTS:([A-Z0-9,]+)/);
-    const replyText = fullText.replace(/\nPRODUCTS:[A-Z0-9,]+/, '').trim();
+    const productMatch = fullText.match(/PRODUCTS:([A-Za-z0-9,\-]+)/);
+    const rawText = fullText.replace(/\nPRODUCTS:[A-Za-z0-9,\-]+/, '').replace(/PRODUCTS:[A-Za-z0-9,\-]+/, '').trim();
+    const replyText = rawText.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1').trim();
     const productCodes = productMatch ? productMatch[1].split(',').map(s => s.trim()) : [];
     const products = productCodes
       .map(code => inventory.find(p => p.product_code === code))
@@ -154,3 +158,10 @@ app.get('/health', (_, res) => res.json({ status: 'ok', time: new Date().toISOSt
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`[Bot] Server running on port ${PORT}`));
+
+// ── KEEPALIVE — ping self every 14 mins to prevent Render cold starts ────────
+setInterval(() => {
+  fetch(`http://localhost:${process.env.PORT || 3000}/health`)
+    .then(() => console.log('[Keepalive] ping ok'))
+    .catch(e => console.warn('[Keepalive] ping failed:', e.message));
+}, 14 * 60 * 1000);
