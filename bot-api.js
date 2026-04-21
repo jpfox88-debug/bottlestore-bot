@@ -20,14 +20,24 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { getInventory, filterByWarehouse, formatForPrompt, searchInventory } = require('./inventory-connector');
 
 // Prefer Render persistent disk mounted at /data; fall back to repo copy for local dev.
-const PROMOTIONS_FILE = (() => {
+function resolveDataFile(filename) {
   const diskDir = '/data';
   try {
-    if (fs.statSync(diskDir).isDirectory()) return path.join(diskDir, 'promotions.json');
+    if (fs.statSync(diskDir).isDirectory()) return path.join(diskDir, filename);
   } catch { /* /data not present, fall through */ }
-  return path.join(__dirname, 'promotions.json');
-})();
+  return path.join(__dirname, filename);
+}
+
+const PROMOTIONS_FILE = resolveDataFile('promotions.json');
+const SETTINGS_FILE = resolveDataFile('settings.json');
 console.log(`[Promotions] Storage: ${PROMOTIONS_FILE}`);
+console.log(`[Settings] Storage: ${SETTINGS_FILE}`);
+
+const DEFAULT_SETTINGS = {
+  welcomeEnabled: false,
+  welcomeDelay: 3,
+  welcomeMessage: "Hello! I'm Jeffrey, your personal sommelier. Looking for something special today?",
+};
 
 async function readPromotions() {
   try {
@@ -40,6 +50,20 @@ async function readPromotions() {
 
 async function writePromotions(arr) {
   await fs.promises.writeFile(PROMOTIONS_FILE, JSON.stringify(arr, null, 2));
+}
+
+async function readSettings() {
+  try {
+    const parsed = JSON.parse(await fs.promises.readFile(SETTINGS_FILE, 'utf8'));
+    return { ...DEFAULT_SETTINGS, ...parsed };
+  } catch (e) {
+    if (e.code === 'ENOENT') return { ...DEFAULT_SETTINGS };
+    throw e;
+  }
+}
+
+async function writeSettings(s) {
+  await fs.promises.writeFile(SETTINGS_FILE, JSON.stringify(s, null, 2));
 }
 
 function requireAdminAuth(req, res, next) {
@@ -384,6 +408,46 @@ app.delete('/api/promotions/:id', requireAdminAuth, async (req, res) => {
   } catch (err) {
     console.error('[Promotions] delete error:', err);
     res.status(500).json({ error: 'Failed to delete promotion' });
+  }
+});
+
+// ── SETTINGS ──────────────────────────────────────────────
+app.get('/api/settings', async (_, res) => {
+  try {
+    const settings = await readSettings();
+    res.json({ settings });
+  } catch (err) {
+    console.error('[Settings] read error:', err);
+    res.status(500).json({ error: 'Failed to load settings' });
+  }
+});
+
+app.post('/api/settings', requireAdminAuth, async (req, res) => {
+  const { welcomeEnabled, welcomeDelay, welcomeMessage } = req.body || {};
+  if (typeof welcomeEnabled !== 'boolean') {
+    return res.status(400).json({ error: 'welcomeEnabled must be a boolean' });
+  }
+  const delayNum = Number(welcomeDelay);
+  if (!Number.isFinite(delayNum) || delayNum < 1 || delayNum > 10) {
+    return res.status(400).json({ error: 'welcomeDelay must be a number between 1 and 10' });
+  }
+  if (typeof welcomeMessage !== 'string' || welcomeMessage.trim().length === 0) {
+    return res.status(400).json({ error: 'welcomeMessage must be a non-empty string' });
+  }
+  if (welcomeMessage.length > 500) {
+    return res.status(400).json({ error: 'welcomeMessage must be 500 characters or fewer' });
+  }
+  try {
+    const settings = {
+      welcomeEnabled,
+      welcomeDelay: Math.round(delayNum),
+      welcomeMessage: welcomeMessage.trim(),
+    };
+    await writeSettings(settings);
+    res.json({ settings });
+  } catch (err) {
+    console.error('[Settings] write error:', err);
+    res.status(500).json({ error: 'Failed to save settings' });
   }
 });
 

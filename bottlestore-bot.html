@@ -263,12 +263,15 @@
 </div>
 
 <script>
-  const API_URL = 'https://bottlestore-bot.onrender.com/api/bot/message';
+  const API_BASE = 'https://bottlestore-bot.onrender.com';
+  const API_URL = API_BASE + '/api/bot/message';
+  const SETTINGS_URL = API_BASE + '/api/settings';
   // Warehouse is passed automatically — set this to whatever the app detects
   // For testing purposes defaults to empty (no filter = all warehouses)
   const WAREHOUSE = '';
   const sessionId = 'session_' + Math.random().toString(36).slice(2);
   let isLoading = false;
+  let userInteracted = false;
 
   function setMode(mode) {
     const chat = document.getElementById('chatMode');
@@ -294,6 +297,7 @@
   const input = document.getElementById('messageInput');
   const sendBtn = document.getElementById('sendBtn');
   input.addEventListener('input', () => { sendBtn.disabled = input.value.trim() === '' || isLoading; });
+  input.addEventListener('input', () => { userInteracted = true; });
 
   function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
   function handleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sendBtn.disabled) sendMessage(); } }
@@ -302,6 +306,7 @@
   async function sendMessage() {
     const message = input.value.trim();
     if (!message || isLoading) return;
+    userInteracted = true;
     const welcome = document.getElementById('welcome');
     if (welcome) welcome.style.display = 'none';
     appendMessage('user', message);
@@ -370,6 +375,24 @@
 
   function removeTyping(id) { document.getElementById(id)?.remove(); }
   function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // Auto-welcome — fetch owner settings and, if enabled, greet the customer
+  // after the configured delay unless they've already started interacting.
+  (async () => {
+    try {
+      const res = await fetch(SETTINGS_URL);
+      if (!res.ok) return;
+      const { settings } = await res.json();
+      if (!settings?.welcomeEnabled) return;
+      const delayMs = Math.min(Math.max(Number(settings.welcomeDelay) || 3, 1), 10) * 1000;
+      setTimeout(() => {
+        if (userInteracted) return;
+        const welcome = document.getElementById('welcome');
+        if (welcome) welcome.style.display = 'none';
+        appendMessage('bot', settings.welcomeMessage);
+      }, delayMs);
+    } catch { /* silently skip auto-welcome on any failure */ }
+  })();
 </script>
 </body>
 </html>
