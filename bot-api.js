@@ -328,30 +328,38 @@ PRODUCTS:code1,code2
     // 9. Build response
     const result = { text: outboundText, products };
 
-    // 10. Avatar mode — generate ElevenLabs audio
-    if (mode === 'avatar' && process.env.ELEVENLABS_KEY) {
+    // 10. Avatar mode — generate ElevenLabs audio.
+    // IMPORTANT: output_format is a QUERY PARAMETER on the /stream endpoint,
+    // not a body field. Putting it in the body silently yields mp3_44100_128
+    // (ElevenLabs's default) which Simli's sendAudioData discards — the
+    // avatar then plays text-silent while the client shows no error.
+    if (mode === 'avatar' && process.env.ELEVENLABS_KEY && process.env.ELEVENLABS_VOICE_ID) {
       try {
-        const ttsRes = await fetch(
-          `https://api.elevenlabs.io/v1/text-to-speech/${process.env.ELEVENLABS_VOICE_ID}/stream`,
-          {
-            method: 'POST',
-            headers: {
-              'xi-api-key': process.env.ELEVENLABS_KEY,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              text: outboundText,
-              model_id: 'eleven_turbo_v2',
-              output_format: 'pcm_16000',
-              voice_settings: { stability: 0.5, similarity_boost: 0.8 }
-            })
-          }
-        );
-        const audioBuffer = await ttsRes.arrayBuffer();
-        result.audioBase64 = Buffer.from(audioBuffer).toString('base64');
+        const ttsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${process.env.ELEVENLABS_VOICE_ID}/stream?output_format=pcm_16000`;
+        const ttsRes = await fetch(ttsUrl, {
+          method: 'POST',
+          headers: {
+            'xi-api-key': process.env.ELEVENLABS_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: outboundText,
+            model_id: 'eleven_turbo_v2',
+            voice_settings: { stability: 0.5, similarity_boost: 0.8 },
+          }),
+        });
+        if (!ttsRes.ok) {
+          const snippet = (await ttsRes.text()).slice(0, 300);
+          console.error('[TTS] ElevenLabs', ttsRes.status, snippet);
+        } else {
+          const audioBuffer = await ttsRes.arrayBuffer();
+          result.audioBase64 = Buffer.from(audioBuffer).toString('base64');
+        }
       } catch (e) {
-        console.error('[TTS] ElevenLabs error:', e.message);
+        console.error('[TTS] ElevenLabs exception:', e.message);
       }
+    } else if (mode === 'avatar') {
+      console.warn('[TTS] avatar mode but ELEVENLABS_KEY or ELEVENLABS_VOICE_ID unset');
     }
 
     res.json(result);
