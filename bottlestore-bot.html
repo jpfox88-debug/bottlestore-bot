@@ -320,7 +320,7 @@
   <!-- AVATAR -->
   <div id="avatarMode">
     <div class="avatar-stage" id="avatarStage">
-      <video id="simliVideo" autoplay playsinline muted></video>
+      <video id="simliVideo" autoplay playsinline></video>
       <audio id="simliAudio" autoplay></audio>
       <div class="avatar-placeholder">
         <div class="avatar-coming-logo"><img alt="Jeffrey"></div>
@@ -390,8 +390,9 @@
   let isLoading = false;
   let userInteracted = false;
   let currentMode = 'chat';
-  let simliClient = null;       // live SimliClient instance (null when not connected)
-  let simliStarting = false;    // true while a session is being negotiated
+  let simliClient = null;        // live SimliClient instance (null when not connected)
+  let simliStarting = false;     // true while a session is being negotiated
+  let simliConnectTimer = null;  // watchdog for "connected" event after start() resolves
 
   function setMode(mode) {
     const isAvatar = mode === 'avatar';
@@ -608,15 +609,26 @@
       simliClient = client;
       // Hook lifecycle events if the .on API is present (it is in 3.x).
       if (typeof client.on === 'function') {
-        client.on('connected', () => { stage.classList.add('is-live'); setAvatarStatus(''); });
+        client.on('connected', () => {
+          if (simliConnectTimer) { clearTimeout(simliConnectTimer); simliConnectTimer = null; }
+          stage.classList.add('is-live');
+          setAvatarStatus('');
+        });
         client.on('disconnected', () => { stage.classList.remove('is-live'); setAvatarStatus('Disconnected'); });
         client.on('failed', () => { stage.classList.remove('is-live'); setAvatarStatus('Connection failed', true); });
         client.on('error', (err) => { console.warn('[Simli] error:', err); });
       }
       await client.start();
-      // Some versions emit 'connected' reliably, some don't — show "Ready"
-      // as a fallback so the status line doesn't sit on "Connecting…".
-      if (!stage.classList.contains('is-live')) setAvatarStatus('Ready');
+      // Trust the 'connected' event. If it doesn't arrive within 5s of
+      // start() resolving, surface that as an actionable error rather than
+      // leaving the status line on "Connecting…" or lying about readiness.
+      simliConnectTimer = setTimeout(() => {
+        simliConnectTimer = null;
+        if (currentMode !== 'avatar' || !simliClient) return;
+        if (!stage.classList.contains('is-live')) {
+          setAvatarStatus('Avatar took too long to connect', true);
+        }
+      }, 5000);
     } catch (err) {
       console.error('[Simli] start failed:', err);
       simliClient = null;
@@ -628,6 +640,7 @@
   }
 
   async function stopAvatarSession() {
+    if (simliConnectTimer) { clearTimeout(simliConnectTimer); simliConnectTimer = null; }
     const stage = document.getElementById('avatarStage');
     stage?.classList.remove('is-live');
     setAvatarStatus('');
