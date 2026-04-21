@@ -687,15 +687,17 @@
       }
       videoEl.addEventListener('playing', () => markLive('video:playing'), { once: true });
       videoEl.addEventListener('loadeddata', () => markLive('video:loadeddata'), { once: true });
-      setAvatarStatus('Starting stream…');
+      setAvatarStatus('Starting stream… (this can take up to a minute)');
       console.log('[Simli] stage: calling start()');
-      // client.start() can hang on WebRTC negotiation failures with no
-      // outward signal — race it against a 15s timeout so we fail loud.
+      // client.start() can hang silently on WebRTC negotiation failures, so
+      // we race it against a timeout. 45s is generous enough to absorb Render
+      // cold-starts and TURN negotiation on flaky networks without hiding a
+      // real dead-end for too long.
       await Promise.race([
         client.start(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('start() did not resolve in 15s')), 15000)),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('start() did not resolve in 45s — tap Chat then Avatar to retry')), 45000)),
       ]);
-      console.log('[Simli] start() resolved; waiting for connected event');
+      console.log('[Simli] start() resolved; waiting for live signal');
       // Trust the 'connected' event. If it doesn't arrive within 5s of
       // start() resolving, surface that as an actionable error rather than
       // leaving the status line on "Connecting…" or lying about readiness.
