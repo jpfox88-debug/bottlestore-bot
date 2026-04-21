@@ -132,6 +132,56 @@
   }
   .switch input:checked + .slider { background: var(--gold-dim); border-color: rgba(201,168,76,0.45); }
   .switch input:checked + .slider::before { left: 22px; background: var(--gold); }
+
+  button.secondary {
+    background: transparent; color: var(--text-dim);
+    border-color: var(--border);
+  }
+  button.secondary:hover { background: var(--surface2); color: var(--text); border-color: rgba(201,168,76,0.25); }
+
+  input[type=file] {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 12px;
+    color: var(--text-dim); font-family: inherit; font-size: 13px;
+  }
+  input[type=file]::file-selector-button {
+    background: var(--gold-dim); color: var(--gold);
+    border: 1px solid rgba(201,168,76,0.3);
+    padding: 6px 14px; border-radius: var(--radius-sm);
+    font-family: inherit; font-size: 10px; font-weight: 400;
+    letter-spacing: 1.3px; text-transform: uppercase;
+    cursor: pointer; margin-right: 12px;
+    transition: all 0.2s;
+  }
+  input[type=file]::file-selector-button:hover { background: var(--gold); color: var(--bg); }
+
+  .preview-wrap { margin-top: 18px; }
+  .preview-title {
+    font-family: 'DM Sans', sans-serif; font-size: 11px; letter-spacing: 1.4px;
+    text-transform: uppercase; color: var(--text-dim); margin-bottom: 10px;
+  }
+  .preview-scroll {
+    max-height: 280px; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface2);
+  }
+  .preview-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .preview-table th, .preview-table td {
+    padding: 8px 12px; text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .preview-table th {
+    background: var(--surface); color: var(--text-dim);
+    font-size: 10px; font-weight: 400;
+    text-transform: uppercase; letter-spacing: 1.2px;
+    position: sticky; top: 0;
+  }
+  .preview-table tr:last-child td { border-bottom: none; }
+  .preview-table tr.skipped { opacity: 0.4; }
+  .preview-table .row-ok { color: var(--ok); font-size: 14px; }
+  .preview-table .row-skip { color: var(--danger); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+
+  .import-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -189,6 +239,43 @@
       <button type="submit">Save promotion</button>
       <div class="status" id="addStatus"></div>
     </form>
+  </section>
+
+  <section>
+    <h2>Bulk import</h2>
+    <p class="section-note">Upload a CSV or Excel file to add many promotions at once. Need the format? Download the template and fill it in.</p>
+
+    <div class="import-actions">
+      <button type="button" class="secondary" id="downloadTemplate">Download template CSV</button>
+    </div>
+
+    <div class="field" style="margin-top: 14px;">
+      <label>Select a .csv or .xlsx file</label>
+      <input type="file" id="importFile" accept=".csv,.xlsx">
+    </div>
+
+    <div class="preview-wrap" id="previewWrap" style="display: none;">
+      <div class="preview-title">Preview</div>
+      <div class="preview-scroll">
+        <table class="preview-table">
+          <thead>
+            <tr>
+              <th>Trigger</th>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Reason</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </div>
+      <div class="import-actions">
+        <button type="button" id="importBtn" disabled>Import</button>
+      </div>
+    </div>
+
+    <div class="status" id="importStatus"></div>
   </section>
 
   <section>
@@ -326,6 +413,195 @@
       statusEl.className = 'status err';
     }
   });
+
+  // ── BULK IMPORT ─────────────────────────────────────────
+  // Parses CSVs natively (handles quoted fields, escaped quotes, BOM, CRLF)
+  // and XLSX via SheetJS loaded on demand. Previews rows before POSTing
+  // each one sequentially to /api/promotions.
+
+  let parsedRows = [];
+
+  function isValidRow(r) {
+    return !!(r.trigger && r.product_code && r.product_name);
+  }
+
+  function parseCSV(text) {
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip UTF-8 BOM
+    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const rows = [];
+    let row = [];
+    let field = '';
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else inQuotes = false;
+        } else {
+          field += c;
+        }
+      } else {
+        if (c === '"') inQuotes = true;
+        else if (c === ',') { row.push(field); field = ''; }
+        else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+        else field += c;
+      }
+    }
+    if (field.length || row.length) { row.push(field); rows.push(row); }
+    return rows.filter(r => r.length && !(r.length === 1 && r[0] === ''));
+  }
+
+  function rowsToObjects(rows) {
+    if (rows.length < 2) return [];
+    const headers = rows[0].map(h => String(h).trim().toLowerCase());
+    return rows.slice(1).map(cols => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = String(cols[i] ?? '').trim(); });
+      return obj;
+    });
+  }
+
+  let sheetJsPromise = null;
+  function loadSheetJS() {
+    if (window.XLSX) return Promise.resolve();
+    if (sheetJsPromise) return sheetJsPromise;
+    sheetJsPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js';
+      s.onload = () => resolve();
+      s.onerror = () => { sheetJsPromise = null; reject(new Error('Failed to load SheetJS')); };
+      document.head.appendChild(s);
+    });
+    return sheetJsPromise;
+  }
+
+  async function xlsxToObjects(file) {
+    await loadSheetJS();
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const firstSheet = wb.Sheets[wb.SheetNames[0]];
+    if (!firstSheet) return [];
+    const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '', raw: false });
+    return rows.map(r => {
+      const obj = {};
+      Object.entries(r).forEach(([k, v]) => { obj[String(k).trim().toLowerCase()] = String(v).trim(); });
+      return obj;
+    });
+  }
+
+  function renderPreview(rows) {
+    const previewWrap = document.getElementById('previewWrap');
+    const previewBody = document.getElementById('previewBody');
+    const importBtn = document.getElementById('importBtn');
+    previewBody.innerHTML = '';
+    if (rows.length === 0) {
+      previewWrap.style.display = 'none';
+      return;
+    }
+    rows.forEach(r => {
+      const valid = isValidRow(r);
+      const tr = document.createElement('tr');
+      if (!valid) tr.className = 'skipped';
+      tr.innerHTML = `
+        <td>${escapeHtml(r.trigger || '—')}</td>
+        <td>${escapeHtml(r.product_code || '—')}</td>
+        <td>${escapeHtml(r.product_name || '—')}</td>
+        <td>${escapeHtml(r.reason || '')}</td>
+        <td>${valid ? '<span class="row-ok">✓</span>' : '<span class="row-skip">Skip</span>'}</td>
+      `;
+      previewBody.appendChild(tr);
+    });
+    const validCount = rows.filter(isValidRow).length;
+    importBtn.textContent = validCount > 0
+      ? `Import ${validCount} promotion${validCount === 1 ? '' : 's'}`
+      : 'No valid rows to import';
+    importBtn.disabled = validCount === 0;
+    previewWrap.style.display = 'block';
+  }
+
+  async function handleFile(file) {
+    const statusEl = document.getElementById('importStatus');
+    statusEl.className = 'status'; statusEl.textContent = 'Parsing…';
+    parsedRows = [];
+    try {
+      const lower = file.name.toLowerCase();
+      if (lower.endsWith('.csv')) {
+        const text = await file.text();
+        parsedRows = rowsToObjects(parseCSV(text));
+      } else if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+        parsedRows = await xlsxToObjects(file);
+      } else {
+        throw new Error('Unsupported file type — use .csv or .xlsx');
+      }
+      if (parsedRows.length === 0) {
+        statusEl.textContent = 'No data rows found in file.';
+        statusEl.className = 'status err';
+        document.getElementById('previewWrap').style.display = 'none';
+        return;
+      }
+      renderPreview(parsedRows);
+      statusEl.textContent = `Parsed ${parsedRows.length} row${parsedRows.length === 1 ? '' : 's'}.`;
+      statusEl.className = 'status';
+    } catch (err) {
+      statusEl.textContent = err.message || 'Failed to parse file.';
+      statusEl.className = 'status err';
+      document.getElementById('previewWrap').style.display = 'none';
+    }
+  }
+
+  async function runImport() {
+    const statusEl = document.getElementById('importStatus');
+    const importBtn = document.getElementById('importBtn');
+    const valid = parsedRows.filter(isValidRow);
+    const skipped = parsedRows.length - valid.length;
+    if (valid.length === 0) return;
+    importBtn.disabled = true;
+    let imported = 0;
+    let failed = 0;
+    for (let i = 0; i < valid.length; i++) {
+      const row = valid[i];
+      statusEl.className = 'status';
+      statusEl.textContent = `Importing ${i + 1} of ${valid.length}…`;
+      try {
+        await api('POST', '/api/promotions', {
+          trigger: row.trigger,
+          product_code: row.product_code,
+          product_name: row.product_name,
+          reason: row.reason || '',
+        });
+        imported++;
+      } catch {
+        failed++;
+      }
+    }
+    const parts = [`${imported} imported`, `${failed} failed`];
+    if (skipped > 0) parts.push(`${skipped} skipped`);
+    statusEl.textContent = parts.join(', ') + '.';
+    statusEl.className = failed === 0 ? 'status ok' : 'status err';
+    importBtn.disabled = false;
+    loadPromotions();
+  }
+
+  function downloadTemplate() {
+    const csv = 'trigger,product_code,product_name,reason\nprosecco,1234,La Marca Prosecco,best seller\n';
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'promotions-template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById('downloadTemplate').addEventListener('click', downloadTemplate);
+  document.getElementById('importFile').addEventListener('change', (e) => {
+    const f = e.target.files?.[0];
+    if (f) handleFile(f);
+  });
+  document.getElementById('importBtn').addEventListener('click', runImport);
 
   getPassword();
   loadSettings();
