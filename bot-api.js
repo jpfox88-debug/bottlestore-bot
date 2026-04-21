@@ -54,11 +54,33 @@ function requireAdminAuth(req, res, next) {
 const app = express();
 app.use(express.json());
 app.use(cors());
+app.set('trust proxy', true); // Render sits behind a proxy; trust X-Forwarded-For for req.ip
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // In-memory session store (swap for Redis in production)
 const sessions = new Map();
+const disclosedSessions = new Set();
+
+// ── RATE LIMIT (per IP, 30 req/min) ───────────────────────
+const ipCounters = new Map();
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX = 30;
+
+function rateLimitMiddleware(req, res, next) {
+  const ip = req.ip || 'unknown';
+  const now = Date.now();
+  const entry = ipCounters.get(ip);
+  if (!entry || now - entry.windowStart > RATE_WINDOW_MS) {
+    ipCounters.set(ip, { count: 1, windowStart: now });
+    return next();
+  }
+  if (entry.count >= RATE_MAX) {
+    return res.status(429).json({ error: "Jeffrey is catching his breath — please try again in a minute." });
+  }
+  entry.count++;
+  next();
+}
 
 // ── SUPPORT QUESTIONS — answer without touching inventory ─
 const SUPPORT_PATTERNS = [
@@ -113,7 +135,7 @@ Respond ONLY with JSON, no other text:
 }
 
 // ── MAIN BOT ENDPOINT ─────────────────────────────────────
-app.post('/api/bot/message', async (req, res) => {
+app.post('/api/bot/message', rateLimitMiddleware, async (req, res) => {
   const { message, sessionId, warehouse, mode = 'chat' } = req.body;
 
   if (!message || !sessionId) {
@@ -169,7 +191,15 @@ ${inventoryText}
 ${promotionsBlock}
 YOUR RULES:
 - ONLY recommend products listed above — they are guaranteed in stock for this customer's area
-- Always mention the price in AED
+- Never state a price unless it appears exactly in the inventory list provided
+- Never claim a product is in stock unless it appears in the inventory list provided
+- Never invent or embellish product details beyond your sommelier knowledge — tasting notes and food pairings are fine, but invented awards, ratings, scores or vintages are not
+- If you are unsure about something, say so honestly rather than guess
+- Never create false urgency — do not say things like "only X left", "selling fast", "while stocks last", or similar scarcity tactics
+- Never use manipulative or high-pressure language
+- Never collect or ask for personal information beyond what is needed to help with the order
+- If a customer asks whether you are a robot, an AI, or human (or any similar question about your nature), always answer honestly that you are an AI assistant
+- Always mention the price in AED when recommending a product
 - Use your expert knowledge of wines, spirits and beers to give tasting notes, food pairings and context
 - Be warm, concise and conversational — 2 to 4 sentences unless listing products
 - If nothing in the list matches what the customer wants, say so honestly and suggest the closest available alternative
@@ -214,8 +244,18 @@ PRODUCTS:code1,code2
       .trim();
 
     const productCodes = productMatch ? productMatch[1].split(',').map(s => s.trim()) : [];
+    const promotedCodes = new Set(activePromotions.map(p => p.product_code));
     const products = productCodes
-      .map(code => inventory.find(p => p.product_code === code))
+      .map(code => {
+        let hit = relevantInventory.find(p => p.product_code === code);
+        if (!hit && promotedCodes.has(code)) {
+          hit = inventory.find(p => p.product_code === code);
+        }
+        if (!hit) {
+          console.warn(`[Validate] Stripped product code not in relevantInventory or promotions: ${code}`);
+        }
+        return hit;
+      })
       .filter(Boolean)
       .map(p => ({
         product_code: p.product_code,
@@ -225,15 +265,37 @@ PRODUCTS:code1,code2
         stock: p.available_stock,
       }));
 
-    // 7. Update session history (keep last 20 messages = 10 turns)
+    // Price sanity check — log (don't block) AED figures that don't match any
+    // inventory price or a known support-rule figure (min order / free delivery / express).
+    const SUPPORT_PRICE_CENTS = new Set([5000, 15000, 2500]);
+    const inventoryCents = new Set(relevantInventory.map(p => Math.round(p.price * 100)));
+    const mentioned = [...replyText.matchAll(/AED\s*(\d+(?:[.,]\d+)?)/gi)]
+      .map(m => Math.round(parseFloat(m[1].replace(',', '.')) * 100))
+      .filter(Number.isFinite);
+    const unmatchedPrices = mentioned.filter(c => !inventoryCents.has(c) && !SUPPORT_PRICE_CENTS.has(c));
+    if (unmatchedPrices.length > 0) {
+      console.warn(`[Sanity] Prices mentioned not found in inventory: ${unmatchedPrices.map(c => 'AED ' + (c / 100)).join(', ')}`);
+    }
+
+    // 7. Update session history (keep last 20 messages = 10 turns).
+    // Store Claude's raw reply (without the disclosure prefix) so the model
+    // doesn't start echoing the disclosure pattern on later turns.
     history.push({ role: 'user', content: message });
     history.push({ role: 'assistant', content: replyText });
     sessions.set(sessionId, history.slice(-20));
 
-    // 8. Build response
-    const result = { text: replyText, products };
+    // 8. Prepend one-time AI disclosure on the first response of each session.
+    let outboundText = replyText;
+    if (!disclosedSessions.has(sessionId)) {
+      const disclosure = "Just so you know — I'm Jeffrey, an AI assistant for The Bottle Store. I'm here to help you find the perfect drink but I'm not human.";
+      outboundText = `${disclosure}\n\n${replyText}`;
+      disclosedSessions.add(sessionId);
+    }
 
-    // 9. Avatar mode — generate ElevenLabs audio
+    // 9. Build response
+    const result = { text: outboundText, products };
+
+    // 10. Avatar mode — generate ElevenLabs audio
     if (mode === 'avatar' && process.env.ELEVENLABS_KEY) {
       try {
         const ttsRes = await fetch(
@@ -245,7 +307,7 @@ PRODUCTS:code1,code2
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              text: replyText,
+              text: outboundText,
               model_id: 'eleven_turbo_v2',
               output_format: 'pcm_16000',
               voice_settings: { stability: 0.5, similarity_boost: 0.8 }
@@ -323,6 +385,23 @@ app.delete('/api/promotions/:id', requireAdminAuth, async (req, res) => {
     console.error('[Promotions] delete error:', err);
     res.status(500).json({ error: 'Failed to delete promotion' });
   }
+});
+
+// ── PRIVACY NOTICE ────────────────────────────────────────
+app.get('/api/privacy', (_, res) => {
+  res.type('text/plain').send(
+`Privacy Notice — The Bottle Store AI Sommelier
+
+Jeffrey is an AI assistant. Conversations are held in memory on the server only for the duration of your session so that Jeffrey can remember recent context while helping you.
+
+- Messages are NOT permanently stored, NOT written to disk, and NOT used to train AI models.
+- When your session ends, or when the server restarts, the conversation is discarded.
+- Aggregate operational logs (request counts, error rates, timings) may be retained for monitoring, but do not include the content of your messages.
+- No personal information is requested beyond what is needed to fulfil an order.
+
+If you have questions about how your data is handled, please contact The Bottle Store directly.
+`
+  );
 });
 
 // ── HEALTH CHECK ──────────────────────────────────────────
