@@ -1,4 +1,11 @@
 <!DOCTYPE html>
+<!--
+  Jeffrey — The Bottle Store AI Sommelier (floating widget).
+  For now this file is loaded as a full page:
+    <script src="https://jpfox88-debug.github.io/bottlestore-bot/bottlestore-bot.html"></script>
+  A proper JS embed snippet (inject into any host page) comes later.
+  Mobile app WebViews should load with ?app=1 to suppress outbound links.
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -22,15 +29,15 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    background: var(--bg); color: var(--text);
+    background: transparent; color: var(--text);
     font-family: 'DM Sans', sans-serif; font-weight: 300; font-size: 15px;
-    height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+    min-height: 100dvh;
   }
 
   /* HEADER */
   .header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    padding: 12px 14px; border-bottom: 1px solid var(--border);
     background: var(--surface); flex-shrink: 0; position: relative; z-index: 10;
   }
   .header::after {
@@ -39,7 +46,7 @@
   }
   .brand { display: flex; align-items: center; gap: 12px; }
   .brand-logo {
-    width: 42px; height: 42px; border-radius: 50%;
+    width: 28px; height: 28px; border-radius: 50%;
     overflow: hidden;
     border: 1px solid rgba(201,168,76,0.3);
     background: var(--surface2);
@@ -189,9 +196,66 @@
     .bubble-wrap { max-width: 88%; }
     .welcome h2 { font-size: 22px; }
   }
+
+  /* ── FLOATING WIDGET ─────────────────────────────────── */
+  #jeffreyWidget {
+    position: fixed; bottom: 90px; right: 20px;
+    width: 380px; height: 560px;
+    background: var(--bg);
+    border: 1px solid rgba(201,168,76,0.22);
+    border-radius: var(--radius);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(201,168,76,0.04);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    z-index: 9998;
+    transform: translateY(16px); opacity: 0; pointer-events: none;
+    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease;
+  }
+  #jeffreyWidget.is-open { transform: translateY(0); opacity: 1; pointer-events: auto; }
+
+  /* ── TRIGGER PILL ─────────────────────────────────────── */
+  .jeffrey-trigger {
+    position: fixed; bottom: 20px; right: 20px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 18px 6px 6px;
+    background: var(--surface);
+    border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 999px;
+    box-shadow: 0 6px 24px rgba(201,168,76,0.14), 0 2px 8px rgba(0,0,0,0.4);
+    cursor: pointer; z-index: 9999;
+    font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 400;
+    color: var(--gold); letter-spacing: 0.3px;
+    transition: transform 0.2s, box-shadow 0.2s, padding 0.2s;
+  }
+  .jeffrey-trigger:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(201,168,76,0.18), 0 2px 8px rgba(0,0,0,0.5); }
+  .jeffrey-trigger-logo {
+    width: 44px; height: 44px; border-radius: 50%;
+    overflow: hidden; border: 1px solid rgba(201,168,76,0.35);
+    background: var(--surface2); flex-shrink: 0;
+  }
+  .jeffrey-trigger-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .jeffrey-trigger-label { transition: opacity 0.15s; }
+  .jeffrey-trigger-close {
+    display: none; font-size: 22px; font-weight: 300; line-height: 1;
+    padding-right: 6px; color: var(--gold);
+  }
+  .jeffrey-trigger.is-open .jeffrey-trigger-label { display: none; }
+  .jeffrey-trigger.is-open .jeffrey-trigger-close { display: inline-block; }
+
+  @media (max-width: 480px) {
+    #jeffreyWidget {
+      width: 100vw; height: 70vh;
+      bottom: 80px; right: 0; left: 0;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+    .jeffrey-trigger:not(.is-open) { padding: 6px; }
+    .jeffrey-trigger:not(.is-open) .jeffrey-trigger-label { display: none; }
+  }
 </style>
 </head>
 <body>
+
+<div id="jeffreyWidget">
 
 <!-- HEADER -->
 <div class="header">
@@ -262,6 +326,15 @@
   </div>
   <div class="input-hint">21+ only</div>
 </div>
+
+</div><!-- /#jeffreyWidget -->
+
+<!-- TRIGGER PILL (always visible) -->
+<button type="button" class="jeffrey-trigger" id="jeffreyTrigger" aria-label="Open Jeffrey">
+  <span class="jeffrey-trigger-logo"><img alt="Jeffrey"></span>
+  <span class="jeffrey-trigger-label">Ask Jeffrey</span>
+  <span class="jeffrey-trigger-close" aria-hidden="true">×</span>
+</button>
 
 <script>
   const API_BASE = 'https://bottlestore-bot.onrender.com';
@@ -386,6 +459,22 @@
   function removeTyping(id) { document.getElementById(id)?.remove(); }
   function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+  // ── WIDGET OPEN/CLOSE ────────────────────────────────────
+  const widgetEl = document.getElementById('jeffreyWidget');
+  const triggerEl = document.getElementById('jeffreyTrigger');
+
+  function openWidget() { widgetEl.classList.add('is-open'); triggerEl.classList.add('is-open'); }
+  function closeWidget() { widgetEl.classList.remove('is-open'); triggerEl.classList.remove('is-open'); }
+  function toggleWidget() { widgetEl.classList.contains('is-open') ? closeWidget() : openWidget(); }
+  triggerEl.addEventListener('click', toggleWidget);
+
+  // Copy the header's base64 gnome into the trigger logo to avoid duplicating it.
+  {
+    const src = document.querySelector('.brand-logo img')?.src;
+    const target = document.querySelector('.jeffrey-trigger-logo img');
+    if (src && target) target.src = src;
+  }
+
   // Auto-welcome — fetch owner settings and, if enabled, greet the customer
   // after the configured delay unless they've already started interacting.
   (async () => {
@@ -397,6 +486,7 @@
       const delayMs = Math.min(Math.max(Number(settings.welcomeDelay) || 3, 1), 10) * 1000;
       setTimeout(() => {
         if (userInteracted) return;
+        openWidget();
         const welcome = document.getElementById('welcome');
         if (welcome) welcome.style.display = 'none';
         appendMessage('bot', settings.welcomeMessage);
