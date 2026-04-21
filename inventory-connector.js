@@ -209,13 +209,36 @@ function searchInventory(inventory, intent, maxResults = 80) {
     .slice(0, maxResults);
 
   if (relevant.length < 5) {
-    console.log('[Search] No strong matches, falling back to top stock');
-    return inventory
-      .sort((a, b) => (b.available_stock ?? b.total_stock) - (a.available_stock ?? a.total_stock))
-      .slice(0, maxResults);
+    console.log('[Search] No strong matches, falling back to diverse cross-section');
+    return diverseCrossSection(inventory, maxResults);
   }
 
   return relevant;
+}
+
+// When search finds nothing, round-robin across categories (each category's
+// items pre-sorted by stock) so the fallback isn't dominated by whichever
+// category happens to carry the highest stock levels. Prevents Jeffrey from
+// seeing e.g. only non-alcoholic items and generalising from that.
+function diverseCrossSection(inventory, maxResults) {
+  const byCategory = new Map();
+  for (const p of inventory) {
+    const cat = p.primary_category || 'Other';
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    byCategory.get(cat).push(p);
+  }
+  for (const arr of byCategory.values()) {
+    arr.sort((a, b) => (b.available_stock ?? b.total_stock) - (a.available_stock ?? a.total_stock));
+  }
+  const buckets = [...byCategory.values()];
+  const out = [];
+  let i = 0;
+  while (out.length < maxResults && buckets.some(b => b.length > 0)) {
+    const bucket = buckets[i % buckets.length];
+    if (bucket.length > 0) out.push(bucket.shift());
+    i++;
+  }
+  return out;
 }
 
 // ── HELPERS ───────────────────────────────────────────────

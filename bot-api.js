@@ -84,7 +84,6 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // In-memory session store (swap for Redis in production)
 const sessions = new Map();
-const disclosedSessions = new Set();
 
 // ── RATE LIMIT (per IP, 30 req/min) ───────────────────────
 const ipCounters = new Map();
@@ -222,6 +221,7 @@ YOUR RULES:
 - Never create false urgency — do not say things like "only X left", "selling fast", "while stocks last", or similar scarcity tactics
 - Never use manipulative or high-pressure language
 - Never collect or ask for personal information beyond what is needed to help with the order
+- Never make blanket statements about the entire inventory — only describe what you can see in the list provided
 - If a customer asks whether you are a robot, an AI, or human (or any similar question about your nature), always answer honestly that you are an AI assistant
 - Always mention the price in AED when recommending a product
 - Use your expert knowledge of wines, spirits and beers to give tasting notes, food pairings and context
@@ -302,20 +302,20 @@ PRODUCTS:code1,code2
       console.warn(`[Sanity] Prices mentioned not found in inventory: ${unmatchedPrices.map(c => 'AED ' + (c / 100)).join(', ')}`);
     }
 
-    // 7. Update session history (keep last 20 messages = 10 turns).
+    // 7. Detect whether this is the very first turn of the session before
+    // we mutate history. Disclosure is prepended only to this first real reply.
+    const isFirstMessage = history.length === 0;
+
+    // 8. Update session history (keep last 20 messages = 10 turns).
     // Store Claude's raw reply (without the disclosure prefix) so the model
     // doesn't start echoing the disclosure pattern on later turns.
     history.push({ role: 'user', content: message });
     history.push({ role: 'assistant', content: replyText });
     sessions.set(sessionId, history.slice(-20));
 
-    // 8. Prepend one-time AI disclosure on the first response of each session.
-    let outboundText = replyText;
-    if (!disclosedSessions.has(sessionId)) {
-      const disclosure = "Just so you know — I'm Jeffrey, an AI assistant for The Bottle Store. I'm here to help you find the perfect drink but I'm not human.";
-      outboundText = `${disclosure}\n\n${replyText}`;
-      disclosedSessions.add(sessionId);
-    }
+    // 9. Prepend one-time AI disclosure on the first real response.
+    const disclosure = "Just so you know — I'm Jeffrey, an AI assistant for The Bottle Store. I'm here to help you find the perfect drink but I'm not human.";
+    const outboundText = isFirstMessage ? `${disclosure}\n\n${replyText}` : replyText;
 
     // 9. Build response
     const result = { text: outboundText, products };
