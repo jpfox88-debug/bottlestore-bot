@@ -619,17 +619,33 @@
         return;
       }
       simliClient = client;
-      // Hook lifecycle events if the .on API is present (it is in 3.x).
+      // Hook lifecycle signals. The simli-client 3.0.1 README claims events
+      // "connected"/"disconnected"/"failed" but those strings do not exist in
+      // the shipped bundle — the actual emitter uses start/stop/track/etc.
+      // Listen broadly to any event that implies the stream is live, and also
+      // to the <video> element's `playing` event as a browser-level backstop
+      // (fires when media actually starts rendering regardless of SDK naming).
+      const markLive = (reason) => {
+        if (simliConnectTimer) { clearTimeout(simliConnectTimer); simliConnectTimer = null; }
+        if (!stage.classList.contains('is-live')) console.log('[Simli] marking live via', reason);
+        stage.classList.add('is-live');
+        setAvatarStatus('');
+      };
+      const markDead = (reason, isErr) => {
+        console.warn('[Simli]', reason);
+        stage.classList.remove('is-live');
+        setAvatarStatus(reason, !!isErr);
+      };
       if (typeof client.on === 'function') {
-        client.on('connected', () => {
-          if (simliConnectTimer) { clearTimeout(simliConnectTimer); simliConnectTimer = null; }
-          stage.classList.add('is-live');
-          setAvatarStatus('');
-        });
-        client.on('disconnected', () => { stage.classList.remove('is-live'); setAvatarStatus('Disconnected'); });
-        client.on('failed', () => { stage.classList.remove('is-live'); setAvatarStatus('Connection failed', true); });
-        client.on('error', (err) => { console.warn('[Simli] error:', err); });
+        for (const name of ['start', 'track', 'connection_info', 'video', 'video_info']) {
+          try { client.on(name, () => markLive('event:' + name)); } catch {}
+        }
+        try { client.on('stop', () => markDead('Disconnected', false)); } catch {}
+        try { client.on('startup_error', (e) => markDead('Connection failed' + (e ? ': ' + (e.message || e) : ''), true)); } catch {}
+        try { client.on('error', (err) => console.warn('[Simli] error event:', err)); } catch {}
       }
+      videoEl.addEventListener('playing', () => markLive('video:playing'), { once: true });
+      videoEl.addEventListener('loadeddata', () => markLive('video:loadeddata'), { once: true });
       setAvatarStatus('Starting stream…');
       console.log('[Simli] stage: calling start()');
       // client.start() can hang on WebRTC negotiation failures with no
