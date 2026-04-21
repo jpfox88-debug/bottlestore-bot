@@ -284,6 +284,7 @@ PRODUCTS:code1,code2
       .map(p => ({
         product_code: p.product_code,
         name: p.name,
+        slug: p.slug,
         price: p.price,
         category: p.primary_category,
         stock: p.available_stock,

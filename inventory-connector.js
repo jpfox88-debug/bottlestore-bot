@@ -23,6 +23,7 @@ async function fetchCMSProducts() {
   return products.map(p => ({
     product_code: String(p.product_code ?? ''),
     name: p.name ?? '',
+    slug: slugify(p.name ?? ''),
     description: stripHtml(p.description ?? ''),
     price: parseFloat(p.price ?? 0),
     categories: (p.categories ?? []).map(c => c.name),
@@ -30,6 +31,19 @@ async function fetchCMSProducts() {
     total_stock: parseInt(p.quantity ?? p.stock ?? 1),
     stock_by_warehouse: {},
   }));
+}
+
+// Reconstructs OpenCart-style seo_url slugs from product names.
+// Verified empirically: & → "and", diacritics transliterated to ASCII,
+// everything else collapsed to hyphens. Approximate — collisions are
+// possible, so this is acceptable for link-outs but not for lookups.
+function slugify(name) {
+  return String(name)
+    .replace(/&/g, ' and ')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip diacritic marks
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 // ── GET INVENTORY (cached) ────────────────────────────────
