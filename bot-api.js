@@ -13,17 +13,25 @@
 
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs').promises;
+const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
 const { getInventory, filterByWarehouse, formatForPrompt, searchInventory } = require('./inventory-connector');
 
-const PROMOTIONS_FILE = path.join(__dirname, 'promotions.json');
+// Prefer Render persistent disk mounted at /data; fall back to repo copy for local dev.
+const PROMOTIONS_FILE = (() => {
+  const diskDir = '/data';
+  try {
+    if (fs.statSync(diskDir).isDirectory()) return path.join(diskDir, 'promotions.json');
+  } catch { /* /data not present, fall through */ }
+  return path.join(__dirname, 'promotions.json');
+})();
+console.log(`[Promotions] Storage: ${PROMOTIONS_FILE}`);
 
 async function readPromotions() {
   try {
-    return JSON.parse(await fs.readFile(PROMOTIONS_FILE, 'utf8'));
+    return JSON.parse(await fs.promises.readFile(PROMOTIONS_FILE, 'utf8'));
   } catch (e) {
     if (e.code === 'ENOENT') return [];
     throw e;
@@ -31,7 +39,7 @@ async function readPromotions() {
 }
 
 async function writePromotions(arr) {
-  await fs.writeFile(PROMOTIONS_FILE, JSON.stringify(arr, null, 2));
+  await fs.promises.writeFile(PROMOTIONS_FILE, JSON.stringify(arr, null, 2));
 }
 
 function requireAdminAuth(req, res, next) {
