@@ -85,25 +85,33 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // In-memory session store (swap for Redis in production)
 const sessions = new Map();
 
-// ── RATE LIMIT (per IP, 30 req/min) ───────────────────────
-const ipCounters = new Map();
-const RATE_WINDOW_MS = 60_000;
-const RATE_MAX = 30;
-
-function rateLimitMiddleware(req, res, next) {
-  const ip = req.ip || 'unknown';
-  const now = Date.now();
-  const entry = ipCounters.get(ip);
-  if (!entry || now - entry.windowStart > RATE_WINDOW_MS) {
-    ipCounters.set(ip, { count: 1, windowStart: now });
-    return next();
-  }
-  if (entry.count >= RATE_MAX) {
-    return res.status(429).json({ error: "Jeffrey is catching his breath — please try again in a minute." });
-  }
-  entry.count++;
-  next();
+// ── RATE LIMIT FACTORY (per IP, sliding window) ───────────
+function makeRateLimiter({ max, windowMs, message = 'Too many requests — please try again in a minute.' }) {
+  const counters = new Map();
+  return (req, res, next) => {
+    const ip = req.ip || 'unknown';
+    const now = Date.now();
+    const entry = counters.get(ip);
+    if (!entry || now - entry.windowStart > windowMs) {
+      counters.set(ip, { count: 1, windowStart: now });
+      return next();
+    }
+    if (entry.count >= max) {
+      return res.status(429).json({ error: message });
+    }
+    entry.count++;
+    next();
+  };
 }
+
+const botMessageLimit = makeRateLimiter({
+  max: 30, windowMs: 60_000,
+  message: "Jeffrey is catching his breath — please try again in a minute.",
+});
+// Session starts cost Simli credits, so they get a tight budget.
+const simliSessionLimit = makeRateLimiter({ max: 10, windowMs: 60_000 });
+// ICE lookups are cheap and called alongside every session start, so looser.
+const simliIceLimit = makeRateLimiter({ max: 60, windowMs: 60_000 });
 
 // ── SUPPORT QUESTIONS — answer without touching inventory ─
 const SUPPORT_PATTERNS = [
@@ -158,7 +166,7 @@ Respond ONLY with JSON, no other text:
 }
 
 // ── MAIN BOT ENDPOINT ─────────────────────────────────────
-app.post('/api/bot/message', rateLimitMiddleware, async (req, res) => {
+app.post('/api/bot/message', botMessageLimit, async (req, res) => {
   const { message, sessionId, warehouse, mode = 'chat' } = req.body;
 
   if (!message || !sessionId) {
@@ -351,6 +359,74 @@ PRODUCTS:code1,code2
   } catch (err) {
     console.error('[Bot] Error:', err);
     res.status(500).json({ error: 'Bot unavailable, please try again.' });
+  }
+});
+
+// ── SIMLI PROXY (avatar mode) ────────────────────────────
+// Both endpoints forward to api.simli.ai with the x-simli-api-key header
+// so the key stays server-side and never reaches the browser.
+const SIMLI_BASE = 'https://api.simli.ai';
+
+app.post('/api/bot/simli-session', simliSessionLimit, async (req, res) => {
+  if (!process.env.SIMLI_API_KEY) {
+    return res.status(503).json({ error: 'Simli not configured' });
+  }
+  const { faceId, handleSilence, maxSessionLength, maxIdleTime } = req.body || {};
+  if (typeof faceId !== 'string' || !faceId.trim()) {
+    return res.status(400).json({ error: 'faceId is required' });
+  }
+  // Only forward fields the client explicitly set so Simli's own defaults
+  // apply elsewhere (handleSilence=true, maxSessionLength=3600, maxIdleTime=300).
+  const payload = { faceId: faceId.trim() };
+  if (typeof handleSilence === 'boolean') payload.handleSilence = handleSilence;
+  const sl = Number(maxSessionLength);
+  if (Number.isFinite(sl)) payload.maxSessionLength = Math.trunc(sl);
+  const it = Number(maxIdleTime);
+  if (Number.isFinite(it)) payload.maxIdleTime = Math.trunc(it);
+
+  try {
+    const upstream = await fetch(`${SIMLI_BASE}/compose/token`, {
+      method: 'POST',
+      headers: {
+        'x-simli-api-key': process.env.SIMLI_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    const text = await upstream.text();
+    if (!upstream.ok) {
+      console.error('[Simli] /compose/token', upstream.status, text.slice(0, 500));
+      return res.status(502).json({ error: 'Simli session request failed' });
+    }
+    const data = JSON.parse(text);
+    if (!data?.session_token || data.session_token === 'FAIL TOKEN') {
+      console.error('[Simli] token response:', text.slice(0, 500));
+      return res.status(502).json({ error: 'Simli did not return a session token' });
+    }
+    res.json({ session_token: data.session_token });
+  } catch (err) {
+    console.error('[Simli] /compose/token exception:', err.message);
+    res.status(502).json({ error: 'Simli session request failed' });
+  }
+});
+
+app.post('/api/bot/simli-ice', simliIceLimit, async (_req, res) => {
+  if (!process.env.SIMLI_API_KEY) {
+    return res.status(503).json({ error: 'Simli not configured' });
+  }
+  try {
+    const upstream = await fetch(`${SIMLI_BASE}/compose/ice`, {
+      headers: { 'x-simli-api-key': process.env.SIMLI_API_KEY },
+    });
+    const text = await upstream.text();
+    if (!upstream.ok) {
+      console.error('[Simli] /compose/ice', upstream.status, text.slice(0, 500));
+      return res.status(502).json({ error: 'Simli ICE request failed' });
+    }
+    res.type('application/json').send(text);
+  } catch (err) {
+    console.error('[Simli] /compose/ice exception:', err.message);
+    res.status(502).json({ error: 'Simli ICE request failed' });
   }
 });
 

@@ -147,26 +147,51 @@
   .suggestion { background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim); font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 300; padding: 8px 14px; border-radius: 20px; cursor: pointer; transition: all 0.2s; }
   .suggestion:hover { border-color: rgba(201,168,76,0.3); color: var(--text); background: var(--gold-glow); }
 
-  /* ── AVATAR MODE (coming soon placeholder) ── */
+  /* ── AVATAR MODE ── */
   #avatarMode {
-    display: none; flex-direction: column; align-items: center;
-    justify-content: center; height: 100%; padding: 28px 24px; gap: 14px;
+    display: none; flex-direction: column; align-items: stretch;
+    height: 100%; padding: 14px; gap: 10px;
   }
   #avatarMode.visible { display: flex; }
+  .avatar-stage {
+    position: relative; flex: 1; min-height: 0;
+    background: #000;
+    border: 1px solid rgba(201,168,76,0.18);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #simliVideo {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; background: #000;
+    opacity: 0; transition: opacity 0.4s;
+  }
+  .avatar-stage.is-live #simliVideo { opacity: 1; }
+  .avatar-placeholder {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 10px; text-align: center; transition: opacity 0.3s;
+    position: relative; z-index: 2;
+  }
+  .avatar-stage.is-live .avatar-placeholder { opacity: 0; pointer-events: none; }
   .avatar-coming-logo {
-    width: 64px; height: 64px; border-radius: 50%;
+    width: 56px; height: 56px; border-radius: 50%;
     overflow: hidden; border: 1px solid rgba(201,168,76,0.35);
     background: var(--surface2);
   }
   .avatar-coming-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .avatar-coming-title {
-    font-family: 'Cormorant Garamond', serif; font-size: 26px;
+    font-family: 'Cormorant Garamond', serif; font-size: 22px;
     font-weight: 400; letter-spacing: 0.5px;
   }
-  .avatar-coming-sub {
-    font-size: 13px; color: rgba(201,168,76,0.6);
-    max-width: 280px; line-height: 1.6; font-style: italic; text-align: center;
+  .avatar-status {
+    position: absolute; bottom: 10px; left: 0; right: 0;
+    text-align: center; font-size: 10px; font-weight: 400;
+    color: var(--text-dim); letter-spacing: 1.8px; text-transform: uppercase;
+    pointer-events: none; transition: opacity 0.3s; z-index: 3;
+    padding: 0 12px;
   }
+  .avatar-status.hidden { opacity: 0; }
+  .avatar-status.err { color: var(--danger, #c54c4c); }
 
   /* INPUT */
   .input-area {
@@ -294,9 +319,15 @@
 
   <!-- AVATAR -->
   <div id="avatarMode">
-    <div class="avatar-coming-logo"><img alt="Jeffrey"></div>
-    <div class="avatar-coming-title">Avatar Mode</div>
-    <div class="avatar-coming-sub">Coming soon — Jeffrey will be able to speak with you face to face.</div>
+    <div class="avatar-stage" id="avatarStage">
+      <video id="simliVideo" autoplay playsinline muted></video>
+      <audio id="simliAudio" autoplay></audio>
+      <div class="avatar-placeholder">
+        <div class="avatar-coming-logo"><img alt="Jeffrey"></div>
+        <div class="avatar-coming-title">Jeffrey</div>
+      </div>
+      <div class="avatar-status" id="avatarStatus"></div>
+    </div>
   </div>
 
 </div>
@@ -324,11 +355,31 @@
   <span class="jeffrey-trigger-close" aria-hidden="true">×</span>
 </button>
 
+<!-- Load simli-client as ESM from esm.sh (pinned) and hand it to the main
+     script via a window global + event. If the import fails (network, CDN
+     outage, package bump) the event never fires and the main script shows
+     an error inside the avatar stage instead of hanging. -->
+<script type="module">
+  try {
+    const mod = await import('https://esm.sh/simli-client@3.0.1');
+    window.__SimliClientClass = mod.SimliClient;
+    window.dispatchEvent(new Event('simli-loaded'));
+  } catch (e) {
+    console.error('[Simli] ESM import failed:', e);
+    window.dispatchEvent(new CustomEvent('simli-load-failed', { detail: String(e) }));
+  }
+</script>
+
 <script>
   const API_BASE = 'https://bottlestore-bot.onrender.com';
   const API_URL = API_BASE + '/api/bot/message';
   const SETTINGS_URL = API_BASE + '/api/settings';
+  const SIMLI_SESSION_URL = API_BASE + '/api/bot/simli-session';
+  const SIMLI_ICE_URL = API_BASE + '/api/bot/simli-ice';
   const SHOP_BASE = 'https://thebottlestoredelivery.com';
+  // TODO: swap for a custom Jeffrey face when it's trained.
+  // Tina — first in https://docs.simli.com/api-reference/preset-faces
+  const DEFAULT_FACE_ID = 'cace3ef7-a4c4-425d-a8cf-a5358eb0c427';
   // Mobile app WebViews should load this page with ?app=1 to suppress
   // outbound links (product cards stay non-clickable inside the app).
   const IS_APP = new URLSearchParams(location.search).get('app') === '1';
@@ -338,24 +389,36 @@
   const sessionId = 'session_' + Math.random().toString(36).slice(2);
   let isLoading = false;
   let userInteracted = false;
+  let currentMode = 'chat';
+  let simliClient = null;       // live SimliClient instance (null when not connected)
+  let simliStarting = false;    // true while a session is being negotiated
 
   function setMode(mode) {
     const isAvatar = mode === 'avatar';
+    const prev = currentMode;
+    currentMode = isAvatar ? 'avatar' : 'chat';
+
     const chat = document.getElementById('chatMode');
     const avatar = document.getElementById('avatarMode');
     const inputArea = document.getElementById('inputArea');
     const btnChat = document.getElementById('btnChat');
     const btnAvatar = document.getElementById('btnAvatar');
 
-    // Use inline style for chat (overrides its #chatMode { display: flex })
-    // and empty-string for inputArea so it reverts to its CSS default (block)
-    // when returning to chat mode, rather than hard-coding 'block'.
     chat.style.display = isAvatar ? 'none' : 'flex';
     avatar.classList.toggle('visible', isAvatar);
-    inputArea.style.display = isAvatar ? 'none' : '';
-    inputArea.hidden = isAvatar; // belt-and-braces in case any CSS shadows inline style
+    // Input stays visible in both modes so users can type while the avatar speaks.
+    inputArea.style.display = '';
+    inputArea.hidden = false;
     btnChat.classList.toggle('active', !isAvatar);
     btnAvatar.classList.toggle('active', isAvatar);
+
+    // Lazy Simli session lifecycle: only negotiate when user actually enters
+    // avatar mode, and tear it down when they leave so we don't burn credits.
+    if (isAvatar && prev !== 'avatar') {
+      startAvatarSession();
+    } else if (!isAvatar && prev === 'avatar') {
+      stopAvatarSession();
+    }
   }
 
   const input = document.getElementById('messageInput');
@@ -383,14 +446,29 @@
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, sessionId, warehouse: WAREHOUSE, mode: 'chat' }),
+        body: JSON.stringify({ message, sessionId, warehouse: WAREHOUSE, mode: currentMode }),
         signal: controller.signal
       });
       clearTimeout(timeout);
       if (!res.ok) throw new Error();
       const data = await res.json();
       removeTyping(typingId);
+      // Mirror into the chat log regardless of mode so toggling back to
+      // chat shows the full conversation.
       appendMessage('bot', data.text, data.products);
+      // In avatar mode, pipe the ElevenLabs audio (PCM16 LE @ 16kHz mono,
+      // base64-encoded) directly into Simli's sendAudioData — it expects
+      // exactly that format as a Uint8Array.
+      if (currentMode === 'avatar' && data.audioBase64 && simliClient) {
+        try {
+          const bin = atob(data.audioBase64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          simliClient.sendAudioData(bytes);
+        } catch (e) {
+          console.warn('[Simli] sendAudioData failed:', e);
+        }
+      }
     } catch {
       removeTyping(typingId);
       appendMessage('bot', "I'm having a moment — please try again in a few seconds.");
@@ -469,6 +547,105 @@
   } else {
     copyGnomeImage();
   }
+
+  // ── SIMLI AVATAR ────────────────────────────────────────
+  // Waits for the ESM module script to load SimliClient. Resolves on the
+  // simli-loaded event, rejects on simli-load-failed, or times out after
+  // 10s so a CDN outage doesn't hang the UI forever.
+  function simliReady(timeoutMs = 10000) {
+    if (window.__SimliClientClass) return Promise.resolve(window.__SimliClientClass);
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('simli-client did not load in time')), timeoutMs);
+      window.addEventListener('simli-loaded', () => {
+        clearTimeout(t);
+        resolve(window.__SimliClientClass);
+      }, { once: true });
+      window.addEventListener('simli-load-failed', (e) => {
+        clearTimeout(t);
+        reject(new Error(e.detail || 'simli-client failed to load'));
+      }, { once: true });
+    });
+  }
+
+  function setAvatarStatus(text, isError = false) {
+    const el = document.getElementById('avatarStatus');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('err', isError);
+    el.classList.toggle('hidden', !text);
+  }
+
+  async function startAvatarSession() {
+    if (simliClient || simliStarting) return;
+    simliStarting = true;
+    const stage = document.getElementById('avatarStage');
+    stage.classList.remove('is-live');
+    setAvatarStatus('Connecting…');
+    try {
+      const SimliClass = await simliReady();
+      const [tokenRes, iceRes] = await Promise.all([
+        fetch(SIMLI_SESSION_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ faceId: DEFAULT_FACE_ID }),
+        }),
+        fetch(SIMLI_ICE_URL, { method: 'POST' }),
+      ]);
+      if (!tokenRes.ok) throw new Error('session request failed (' + tokenRes.status + ')');
+      if (!iceRes.ok) throw new Error('ICE request failed (' + iceRes.status + ')');
+      const { session_token } = await tokenRes.json();
+      const iceServers = await iceRes.json();
+      const videoEl = document.getElementById('simliVideo');
+      const audioEl = document.getElementById('simliAudio');
+      // Positional args (see simli-client docs) — only the first four matter.
+      const client = new SimliClass(session_token, videoEl, audioEl, iceServers);
+      // If the user switched back to chat while we were negotiating, bail
+      // before we install the client or call start.
+      if (currentMode !== 'avatar') {
+        try { await (client.stop?.() ?? client.close?.()); } catch {}
+        return;
+      }
+      simliClient = client;
+      // Hook lifecycle events if the .on API is present (it is in 3.x).
+      if (typeof client.on === 'function') {
+        client.on('connected', () => { stage.classList.add('is-live'); setAvatarStatus(''); });
+        client.on('disconnected', () => { stage.classList.remove('is-live'); setAvatarStatus('Disconnected'); });
+        client.on('failed', () => { stage.classList.remove('is-live'); setAvatarStatus('Connection failed', true); });
+        client.on('error', (err) => { console.warn('[Simli] error:', err); });
+      }
+      await client.start();
+      // Some versions emit 'connected' reliably, some don't — show "Ready"
+      // as a fallback so the status line doesn't sit on "Connecting…".
+      if (!stage.classList.contains('is-live')) setAvatarStatus('Ready');
+    } catch (err) {
+      console.error('[Simli] start failed:', err);
+      simliClient = null;
+      stage.classList.remove('is-live');
+      setAvatarStatus('Avatar unavailable', true);
+    } finally {
+      simliStarting = false;
+    }
+  }
+
+  async function stopAvatarSession() {
+    const stage = document.getElementById('avatarStage');
+    stage?.classList.remove('is-live');
+    setAvatarStatus('');
+    const c = simliClient;
+    simliClient = null;
+    if (!c) return;
+    try {
+      // Docs disagree on stop() vs close() — call whichever exists.
+      if (typeof c.stop === 'function') await c.stop();
+      else if (typeof c.close === 'function') await c.close();
+    } catch (e) {
+      console.warn('[Simli] teardown warning:', e);
+    }
+  }
+
+  // Tear down on page hide so a backgrounded mobile tab doesn't keep the
+  // Simli session alive indefinitely.
+  window.addEventListener('pagehide', () => { stopAvatarSession(); });
 
   // Auto-welcome — on page load, after a short delay, open the widget and
   // greet the customer. Use API settings when reachable; fall back to a
