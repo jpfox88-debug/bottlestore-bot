@@ -13,8 +13,35 @@
 
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs').promises;
+const path = require('path');
+const crypto = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
 const { getInventory, filterByWarehouse, formatForPrompt, searchInventory } = require('./inventory-connector');
+
+const PROMOTIONS_FILE = path.join(__dirname, 'promotions.json');
+
+async function readPromotions() {
+  try {
+    return JSON.parse(await fs.readFile(PROMOTIONS_FILE, 'utf8'));
+  } catch (e) {
+    if (e.code === 'ENOENT') return [];
+    throw e;
+  }
+}
+
+async function writePromotions(arr) {
+  await fs.writeFile(PROMOTIONS_FILE, JSON.stringify(arr, null, 2));
+}
+
+function requireAdminAuth(req, res, next) {
+  const expected = process.env.ADMIN_PASSWORD;
+  const provided = req.headers['x-admin-password'];
+  if (!expected || provided !== expected) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
 
 const app = express();
 app.use(express.json());
@@ -98,8 +125,9 @@ app.post('/api/bot/message', async (req, res) => {
     const history = sessions.get(sessionId) ?? [];
 
     // 3. For support questions, skip inventory entirely
+    const isSupport = isSupportQuery(message);
     let relevantInventory;
-    if (isSupportQuery(message)) {
+    if (isSupport) {
       relevantInventory = []; // no inventory needed for delivery/payment questions
     } else {
       // STEP 1 — Classify the query (fast, cheap, uses Haiku)
@@ -115,6 +143,14 @@ app.post('/api/bot/message', async (req, res) => {
       ? formatForPrompt(relevantInventory)
       : '(No inventory needed for this query)';
 
+    // 3b. Load active promotions (skip for support queries)
+    const activePromotions = isSupport
+      ? []
+      : (await readPromotions()).filter(p => p.active);
+    const promotionsBlock = activePromotions.length > 0
+      ? `\nFEATURED PRODUCTS — recommend these first when the trigger word appears in the customer's message:\n${activePromotions.map(p => `- "${p.trigger}" → ${p.product_name} [${p.product_code}]`).join('\n')}\n`
+      : '';
+
     // 4. Build system prompt
     const systemPrompt = `You are Jeffrey, a warm, sharp and knowledgeable AI sommelier for The Bottle Store — a premium bottle shop and delivery service in the UAE delivering across Abu Dhabi and Dubai.
 
@@ -122,7 +158,7 @@ This customer is ordering for delivery to: ${warehouseLabel.toUpperCase()}
 
 CURRENT STOCK AVAILABLE FOR THIS CUSTOMER:
 ${inventoryText}
-
+${promotionsBlock}
 YOUR RULES:
 - ONLY recommend products listed above — they are guaranteed in stock for this customer's area
 - Always mention the price in AED
@@ -229,6 +265,56 @@ app.get('/api/inventory', async (req, res) => {
   const all = await getInventory();
   const filtered = filterByWarehouse(all, warehouse);
   res.json({ total: filtered.length, warehouse: warehouse ?? 'all', products: filtered });
+});
+
+// ── PROMOTIONS ────────────────────────────────────────────
+app.get('/api/promotions', async (_, res) => {
+  try {
+    const promotions = await readPromotions();
+    res.json({ promotions });
+  } catch (err) {
+    console.error('[Promotions] read error:', err);
+    res.status(500).json({ error: 'Failed to load promotions' });
+  }
+});
+
+app.post('/api/promotions', requireAdminAuth, async (req, res) => {
+  const { trigger, product_code, product_name, reason } = req.body || {};
+  if (!trigger || !product_code || !product_name) {
+    return res.status(400).json({ error: 'trigger, product_code, and product_name are required' });
+  }
+  try {
+    const promotions = await readPromotions();
+    const promo = {
+      id: crypto.randomUUID(),
+      trigger: String(trigger).trim(),
+      product_code: String(product_code).trim(),
+      product_name: String(product_name).trim(),
+      reason: reason ? String(reason).trim() : '',
+      active: true,
+    };
+    promotions.push(promo);
+    await writePromotions(promotions);
+    res.json({ promotion: promo });
+  } catch (err) {
+    console.error('[Promotions] write error:', err);
+    res.status(500).json({ error: 'Failed to save promotion' });
+  }
+});
+
+app.delete('/api/promotions/:id', requireAdminAuth, async (req, res) => {
+  try {
+    const promotions = await readPromotions();
+    const next = promotions.filter(p => p.id !== req.params.id);
+    if (next.length === promotions.length) {
+      return res.status(404).json({ error: 'Promotion not found' });
+    }
+    await writePromotions(next);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Promotions] delete error:', err);
+    res.status(500).json({ error: 'Failed to delete promotion' });
+  }
 });
 
 // ── HEALTH CHECK ──────────────────────────────────────────

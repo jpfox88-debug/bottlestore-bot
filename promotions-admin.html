@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jeffrey — Promotions Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface2: #181818;
+    --border: rgba(255,255,255,0.07);
+    --gold: #c9a84c;
+    --gold-dim: rgba(201,168,76,0.15);
+    --gold-glow: rgba(201,168,76,0.06);
+    --text: #f0ece4;
+    --text-dim: rgba(240,236,228,0.45);
+    --text-muted: rgba(240,236,228,0.25);
+    --radius: 16px;
+    --radius-sm: 10px;
+    --danger: #c54c4c;
+    --ok: #4caf78;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-weight: 300; font-size: 15px;
+    min-height: 100vh; padding: 40px 20px;
+  }
+  .container { max-width: 780px; margin: 0 auto; }
+
+  header {
+    text-align: center; margin-bottom: 36px;
+    padding-bottom: 24px; border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  header::after {
+    content: ''; position: absolute; bottom: 0; left: 20%; right: 20%; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent); opacity: 0.4;
+  }
+  h1 { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: 32px; letter-spacing: 0.5px; }
+  .subtitle { color: var(--gold); letter-spacing: 2.5px; text-transform: uppercase; font-size: 10px; margin-top: 6px; }
+
+  section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 26px; margin-bottom: 22px;
+  }
+  h2 { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: 22px; margin-bottom: 18px; }
+
+  .field { margin-bottom: 14px; }
+  label {
+    display: block; font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 6px;
+  }
+  input {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 11px 13px;
+    color: var(--text); font-family: inherit; font-size: 14px; font-weight: 300;
+    transition: border-color 0.2s;
+  }
+  input:focus { outline: none; border-color: rgba(201,168,76,0.4); }
+
+  button {
+    background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(201,168,76,0.3);
+    padding: 10px 22px; font-family: 'DM Sans', sans-serif; font-size: 11px;
+    font-weight: 400; letter-spacing: 1.5px; text-transform: uppercase;
+    border-radius: var(--radius-sm); cursor: pointer; transition: all 0.2s;
+  }
+  button:hover { background: var(--gold); color: var(--bg); }
+  button.danger {
+    background: transparent; color: var(--danger);
+    border-color: rgba(197,76,76,0.3); padding: 7px 14px; font-size: 10px;
+  }
+  button.danger:hover { background: var(--danger); color: var(--bg); }
+
+  .promo-list { display: flex; flex-direction: column; gap: 10px; }
+  .promo {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 14px 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  }
+  .promo-body { flex: 1; min-width: 0; }
+  .promo-trigger {
+    color: var(--gold); font-weight: 500;
+    text-transform: uppercase; font-size: 10px; letter-spacing: 1.5px;
+  }
+  .promo-product {
+    margin-top: 5px; font-size: 14px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .promo-code { color: var(--text-muted); font-size: 12px; }
+  .promo-meta { color: var(--text-muted); font-size: 12px; margin-top: 3px; font-style: italic; }
+
+  .empty { color: var(--text-muted); text-align: center; padding: 24px; font-style: italic; }
+
+  .status { margin-top: 12px; font-size: 12px; color: var(--text-dim); min-height: 16px; letter-spacing: 0.5px; }
+  .status.err { color: var(--danger); }
+  .status.ok { color: var(--ok); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Jeffrey — Promotions</h1>
+    <div class="subtitle">Admin</div>
+  </header>
+
+  <section>
+    <h2>Add a promotion</h2>
+    <form id="addForm">
+      <div class="field">
+        <label>Trigger phrase</label>
+        <input id="trigger" required placeholder="e.g. prosecco" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Product code</label>
+        <input id="product_code" required placeholder="e.g. 1234" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Product name</label>
+        <input id="product_name" required placeholder="e.g. La Marca Prosecco" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Reason (internal only, not shown to customers)</label>
+        <input id="reason" placeholder="e.g. best seller, high margin" autocomplete="off">
+      </div>
+      <button type="submit">Save promotion</button>
+      <div class="status" id="addStatus"></div>
+    </form>
+  </section>
+
+  <section>
+    <h2>Active promotions</h2>
+    <div class="promo-list" id="list"></div>
+    <div class="status" id="listStatus"></div>
+  </section>
+</div>
+
+<script>
+  const API_BASE = 'https://bottlestore-bot.onrender.com';
+
+  function getPassword() {
+    let pw = sessionStorage.getItem('adminPassword');
+    if (!pw) {
+      pw = prompt('Admin password');
+      if (pw) sessionStorage.setItem('adminPassword', pw);
+    }
+    return pw || '';
+  }
+
+  function clearPassword() { sessionStorage.removeItem('adminPassword'); }
+
+  async function api(method, urlPath, body) {
+    const headers = { 'Content-Type': 'application/json', 'x-admin-password': getPassword() };
+    const opts = { method, headers };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(API_BASE + urlPath, opts);
+    if (res.status === 401) {
+      clearPassword();
+      alert('Wrong password. Reload the page to try again.');
+      throw new Error('unauthorized');
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    return data;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);
+  }
+
+  async function loadPromotions() {
+    const listEl = document.getElementById('list');
+    const statusEl = document.getElementById('listStatus');
+    statusEl.className = 'status';
+    statusEl.textContent = '';
+    try {
+      const { promotions } = await api('GET', '/api/promotions');
+      if (!promotions.length) {
+        listEl.innerHTML = '<div class="empty">No promotions yet.</div>';
+        return;
+      }
+      listEl.innerHTML = '';
+      for (const p of promotions) {
+        const row = document.createElement('div');
+        row.className = 'promo';
+        row.innerHTML = `
+          <div class="promo-body">
+            <div class="promo-trigger">${escapeHtml(p.trigger)}</div>
+            <div class="promo-product">${escapeHtml(p.product_name)} <span class="promo-code">[${escapeHtml(p.product_code)}]</span></div>
+            ${p.reason ? `<div class="promo-meta">${escapeHtml(p.reason)}</div>` : ''}
+          </div>
+          <button class="danger" data-id="${escapeHtml(p.id)}">Delete</button>
+        `;
+        row.querySelector('button').addEventListener('click', async () => {
+          if (!confirm(`Delete promotion for "${p.trigger}"?`)) return;
+          try {
+            await api('DELETE', '/api/promotions/' + encodeURIComponent(p.id));
+            loadPromotions();
+          } catch (e) {
+            statusEl.textContent = e.message;
+            statusEl.className = 'status err';
+          }
+        });
+        listEl.appendChild(row);
+      }
+    } catch (e) {
+      statusEl.textContent = e.message;
+      statusEl.className = 'status err';
+    }
+  }
+
+  document.getElementById('addForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const statusEl = document.getElementById('addStatus');
+    statusEl.textContent = 'Saving…';
+    statusEl.className = 'status';
+    const promo = {
+      trigger: document.getElementById('trigger').value.trim(),
+      product_code: document.getElementById('product_code').value.trim(),
+      product_name: document.getElementById('product_name').value.trim(),
+      reason: document.getElementById('reason').value.trim(),
+    };
+    try {
+      await api('POST', '/api/promotions', promo);
+      e.target.reset();
+      statusEl.textContent = 'Saved.';
+      statusEl.className = 'status ok';
+      loadPromotions();
+    } catch (err) {
+      statusEl.textContent = err.message;
+      statusEl.className = 'status err';
+    }
+  });
+
+  getPassword();
+  loadPromotions();
+</script>
+</body>
+</html>
