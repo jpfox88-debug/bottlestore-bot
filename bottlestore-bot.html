@@ -581,21 +581,33 @@
     simliStarting = true;
     const stage = document.getElementById('avatarStage');
     stage.classList.remove('is-live');
-    setAvatarStatus('Connecting…');
+    setAvatarStatus('Loading avatar SDK…');
+    console.log('[Simli] stage: loading SDK');
     try {
       const SimliClass = await simliReady();
+
+      setAvatarStatus('Requesting session…');
+      console.log('[Simli] stage: requesting session + ICE');
       const [tokenRes, iceRes] = await Promise.all([
         fetch(SIMLI_SESSION_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ faceId: DEFAULT_FACE_ID }),
+          signal: AbortSignal.timeout(15000),
         }),
-        fetch(SIMLI_ICE_URL, { method: 'POST' }),
+        fetch(SIMLI_ICE_URL, {
+          method: 'POST',
+          signal: AbortSignal.timeout(15000),
+        }),
       ]);
       if (!tokenRes.ok) throw new Error('session request failed (' + tokenRes.status + ')');
       if (!iceRes.ok) throw new Error('ICE request failed (' + iceRes.status + ')');
       const { session_token } = await tokenRes.json();
       const iceServers = await iceRes.json();
+      console.log('[Simli] got token + ICE servers (' + (Array.isArray(iceServers) ? iceServers.length : 0) + ')');
+
+      setAvatarStatus('Negotiating stream…');
+      console.log('[Simli] stage: constructing client');
       const videoEl = document.getElementById('simliVideo');
       const audioEl = document.getElementById('simliAudio');
       // Positional args (see simli-client docs) — only the first four matter.
@@ -618,7 +630,15 @@
         client.on('failed', () => { stage.classList.remove('is-live'); setAvatarStatus('Connection failed', true); });
         client.on('error', (err) => { console.warn('[Simli] error:', err); });
       }
-      await client.start();
+      setAvatarStatus('Starting stream…');
+      console.log('[Simli] stage: calling start()');
+      // client.start() can hang on WebRTC negotiation failures with no
+      // outward signal — race it against a 15s timeout so we fail loud.
+      await Promise.race([
+        client.start(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('start() did not resolve in 15s')), 15000)),
+      ]);
+      console.log('[Simli] start() resolved; waiting for connected event');
       // Trust the 'connected' event. If it doesn't arrive within 5s of
       // start() resolving, surface that as an actionable error rather than
       // leaving the status line on "Connecting…" or lying about readiness.
@@ -633,7 +653,7 @@
       console.error('[Simli] start failed:', err);
       simliClient = null;
       stage.classList.remove('is-live');
-      setAvatarStatus('Avatar unavailable', true);
+      setAvatarStatus('Avatar unavailable — ' + (err?.message || 'unknown error'), true);
     } finally {
       simliStarting = false;
     }
