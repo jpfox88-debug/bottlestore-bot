@@ -1,6 +1,6 @@
 /**
  * The Bottle Store — Inventory Connector
- * Pulls product data from CMS API only (Odoo integration pending)
+ * Pulls product data from the CMS API.
  * Caches result for 5 minutes
  */
 
@@ -9,7 +9,7 @@ const cache = new NodeCache({ stdTTL: 300 });
 
 // ── CONFIG ──────────────────────────────────────────────
 const CMS_URL = 'https://thebottlestoredelivery.com/index.php?route=extension/feed/products';
-const CMS_TOKEN = process.env.CMS_API_TOKEN || '6971bc164bc91da904758ef1c6ae86c220d7f1937b0beb785b5adcee4998c0ab';
+const CMS_TOKEN = process.env.CMS_API_TOKEN;
 
 // ── FETCH CMS PRODUCTS ───────────────────────────────────
 async function fetchCMSProducts() {
