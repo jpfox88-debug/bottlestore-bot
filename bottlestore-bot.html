@@ -193,6 +193,21 @@
   .avatar-status.hidden { opacity: 0; }
   .avatar-status.err { color: var(--danger, #c54c4c); }
 
+  .avatar-caption {
+    padding: 10px 12px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    flex-shrink: 0; max-height: 34%; overflow-y: auto;
+  }
+  .avatar-caption-label {
+    font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--gold); margin-bottom: 4px; opacity: 0.9;
+  }
+  .avatar-caption-text {
+    font-size: 13px; line-height: 1.5; color: var(--text); font-weight: 300;
+  }
+  .avatar-caption.thinking .avatar-caption-text { color: var(--text-dim); font-style: italic; }
+  .avatar-caption.err .avatar-caption-text { color: var(--danger, #c54c4c); }
+
   /* INPUT */
   .input-area {
     padding: 16px 20px 20px; border-top: 1px solid var(--border);
@@ -328,6 +343,10 @@
       </div>
       <div class="avatar-status" id="avatarStatus"></div>
     </div>
+    <div class="avatar-caption" id="avatarCaption" hidden>
+      <div class="avatar-caption-label">Jeffrey</div>
+      <div class="avatar-caption-text" id="avatarCaptionText"></div>
+    </div>
   </div>
 
 </div>
@@ -441,6 +460,7 @@
     input.value = ''; input.style.height = 'auto';
     sendBtn.disabled = true; isLoading = true;
     const typingId = showTyping();
+    if (currentMode === 'avatar') setAvatarCaption('Jeffrey is thinking…', { thinking: true });
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
@@ -457,22 +477,32 @@
       // Mirror into the chat log regardless of mode so toggling back to
       // chat shows the full conversation.
       appendMessage('bot', data.text, data.products);
-      // In avatar mode, pipe the ElevenLabs audio (PCM16 LE @ 16kHz mono,
-      // base64-encoded) directly into Simli's sendAudioData — it expects
-      // exactly that format as a Uint8Array.
-      if (currentMode === 'avatar' && data.audioBase64 && simliClient) {
-        try {
-          const bin = atob(data.audioBase64);
-          const bytes = new Uint8Array(bin.length);
-          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-          simliClient.sendAudioData(bytes);
-        } catch (e) {
-          console.warn('[Simli] sendAudioData failed:', e);
+      if (currentMode === 'avatar') {
+        setAvatarCaption(data.text || '(no reply text)');
+        // Pipe the ElevenLabs audio (PCM16 LE @ 16kHz mono, base64-encoded)
+        // directly into Simli's sendAudioData — it expects exactly that
+        // format as a Uint8Array.
+        if (data.audioBase64 && simliClient) {
+          try {
+            const bin = atob(data.audioBase64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            simliClient.sendAudioData(bytes);
+          } catch (e) {
+            console.warn('[Simli] sendAudioData failed:', e);
+          }
+        } else if (!data.audioBase64) {
+          // No TTS audio came back — avatar won't speak. Surface this so
+          // the operator can check ELEVENLABS_KEY / voice id on Render.
+          console.warn('[Simli] response had no audioBase64');
         }
       }
-    } catch {
+    } catch (err) {
       removeTyping(typingId);
       appendMessage('bot', "I'm having a moment — please try again in a few seconds.");
+      if (currentMode === 'avatar') {
+        setAvatarCaption('Jeffrey could not reach the kitchen — ' + (err?.message || 'network error'), { error: true });
+      }
     }
     isLoading = false;
     sendBtn.disabled = input.value.trim() === '';
@@ -574,6 +604,17 @@
     el.textContent = text || '';
     el.classList.toggle('err', isError);
     el.classList.toggle('hidden', !text);
+  }
+
+  function setAvatarCaption(text, { thinking = false, error = false } = {}) {
+    const wrap = document.getElementById('avatarCaption');
+    const textEl = document.getElementById('avatarCaptionText');
+    if (!wrap || !textEl) return;
+    if (!text) { wrap.hidden = true; return; }
+    textEl.textContent = text;
+    wrap.classList.toggle('thinking', thinking);
+    wrap.classList.toggle('err', error);
+    wrap.hidden = false;
   }
 
   async function startAvatarSession() {
