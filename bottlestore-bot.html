@@ -147,28 +147,25 @@
   .suggestion { background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim); font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 300; padding: 8px 14px; border-radius: 20px; cursor: pointer; transition: all 0.2s; }
   .suggestion:hover { border-color: rgba(201,168,76,0.3); color: var(--text); background: var(--gold-glow); }
 
-  /* ── AVATAR MODE ── */
+  /* ── AVATAR MODE (coming soon placeholder) ── */
   #avatarMode {
     display: none; flex-direction: column; align-items: center;
-    justify-content: center; height: 100%; padding: 28px 24px; gap: 18px;
+    justify-content: center; height: 100%; padding: 28px 24px; gap: 14px;
   }
   #avatarMode.visible { display: flex; }
-  .avatar-label { font-family: 'Cormorant Garamond', serif; font-size: 13px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text-muted); }
-  .avatar-hint { font-size: 13px; font-weight: 300; color: var(--text-dim); text-align: center; max-width: 280px; line-height: 1.6; }
-
-  /* Simli widget wrapper — let widget control its own size */
-  .simli-wrap {
-    width: 100%;
-    max-width: 400px;
-    border-radius: 20px;
-    overflow: hidden;
-    border: 1px solid rgba(201,168,76,0.2);
-    box-shadow: 0 0 40px rgba(201,168,76,0.04);
+  .avatar-coming-logo {
+    width: 64px; height: 64px; border-radius: 50%;
+    overflow: hidden; border: 1px solid rgba(201,168,76,0.35);
+    background: var(--surface2);
   }
-
-  simli-widget {
-    display: block;
-    width: 100%;
+  .avatar-coming-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .avatar-coming-title {
+    font-family: 'Cormorant Garamond', serif; font-size: 26px;
+    font-weight: 400; letter-spacing: 0.5px;
+  }
+  .avatar-coming-sub {
+    font-size: 13px; color: rgba(201,168,76,0.6);
+    max-width: 280px; line-height: 1.6; font-style: italic; text-align: center;
   }
 
   /* INPUT */
@@ -297,18 +294,9 @@
 
   <!-- AVATAR -->
   <div id="avatarMode">
-    <div class="avatar-label">Live with Jeffrey</div>
-    <div class="simli-wrap">
-      <simli-widget
-        token="rwq4j9njja9lg0q9d45b9"
-        agentid="d2a5c7c6-fed9-4f55-bcb3-062f7cd20103"
-        position="relative"
-        overlay="false"
-        customtext="Speak with Jeffrey"
-        customimage="https://app.simli.com/images/logo.png"
-      ></simli-widget>
-    </div>
-    <div class="avatar-hint">Tap above to start a live voice conversation with Jeffrey.</div>
+    <div class="avatar-coming-logo"><img alt="Jeffrey"></div>
+    <div class="avatar-coming-title">Avatar Mode</div>
+    <div class="avatar-coming-sub">Coming soon — Jeffrey will be able to speak with you face to face.</div>
   </div>
 
 </div>
@@ -468,30 +456,50 @@
   function toggleWidget() { widgetEl.classList.contains('is-open') ? closeWidget() : openWidget(); }
   triggerEl.addEventListener('click', toggleWidget);
 
-  // Copy the header's base64 gnome into the trigger logo to avoid duplicating it.
+  // Copy the header's base64 gnome into other gnome slots (trigger pill,
+  // avatar coming-soon block) so we only carry the image once.
   {
     const src = document.querySelector('.brand-logo img')?.src;
-    const target = document.querySelector('.jeffrey-trigger-logo img');
-    if (src && target) target.src = src;
+    if (src) {
+      document.querySelectorAll('.jeffrey-trigger-logo img, .avatar-coming-logo img')
+        .forEach(img => { img.src = src; });
+    }
   }
 
-  // Auto-welcome — fetch owner settings and, if enabled, greet the customer
-  // after the configured delay unless they've already started interacting.
-  (async () => {
-    try {
-      const res = await fetch(SETTINGS_URL);
-      if (!res.ok) return;
-      const { settings } = await res.json();
-      if (!settings?.welcomeEnabled) return;
-      const delayMs = Math.min(Math.max(Number(settings.welcomeDelay) || 3, 1), 10) * 1000;
-      setTimeout(() => {
-        if (userInteracted) return;
-        openWidget();
-        const welcome = document.getElementById('welcome');
-        if (welcome) welcome.style.display = 'none';
-        appendMessage('bot', settings.welcomeMessage);
-      }, delayMs);
-    } catch { /* silently skip auto-welcome on any failure */ }
+  // Auto-welcome — on page load, after a short delay, open the widget and
+  // greet the customer. Use API settings when reachable; fall back to a
+  // hardcoded message + 3-second delay if anything goes wrong so the
+  // widget still opens. Only the admin explicitly setting welcomeEnabled
+  // to false suppresses the auto-open.
+  (() => {
+    const FALLBACK_DELAY_S = 3;
+    const FALLBACK_MESSAGE = "Hi there! I'm Jeffrey, your personal sommelier at The Bottle Store. What can I help you find today?";
+
+    let delayS = FALLBACK_DELAY_S;
+    let message = FALLBACK_MESSAGE;
+    let enabled = true;
+
+    fetch(SETTINGS_URL, { signal: AbortSignal.timeout(5000) })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const s = data?.settings;
+        if (!s) return;
+        if (typeof s.welcomeEnabled === 'boolean') enabled = s.welcomeEnabled;
+        const d = Number(s.welcomeDelay);
+        if (Number.isFinite(d)) delayS = Math.min(Math.max(d, 1), 10);
+        if (typeof s.welcomeMessage === 'string' && s.welcomeMessage.trim()) message = s.welcomeMessage;
+      })
+      .catch(() => { /* keep fallbacks */ })
+      .finally(() => {
+        if (!enabled) return;
+        setTimeout(() => {
+          if (userInteracted) return;
+          openWidget();
+          const welcomeEl = document.getElementById('welcome');
+          if (welcomeEl) welcomeEl.style.display = 'none';
+          appendMessage('bot', message);
+        }, delayS * 1000);
+      });
   })();
 </script>
 </body>
