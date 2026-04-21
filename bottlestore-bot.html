@@ -340,24 +340,22 @@
   let userInteracted = false;
 
   function setMode(mode) {
+    const isAvatar = mode === 'avatar';
     const chat = document.getElementById('chatMode');
     const avatar = document.getElementById('avatarMode');
     const inputArea = document.getElementById('inputArea');
     const btnChat = document.getElementById('btnChat');
     const btnAvatar = document.getElementById('btnAvatar');
-    if (mode === 'avatar') {
-      chat.style.display = 'none';
-      avatar.classList.add('visible');
-      inputArea.style.display = 'none';
-      btnChat.classList.remove('active');
-      btnAvatar.classList.add('active');
-    } else {
-      chat.style.display = 'flex';
-      avatar.classList.remove('visible');
-      inputArea.style.display = 'block';
-      btnChat.classList.add('active');
-      btnAvatar.classList.remove('active');
-    }
+
+    // Use inline style for chat (overrides its #chatMode { display: flex })
+    // and empty-string for inputArea so it reverts to its CSS default (block)
+    // when returning to chat mode, rather than hard-coding 'block'.
+    chat.style.display = isAvatar ? 'none' : 'flex';
+    avatar.classList.toggle('visible', isAvatar);
+    inputArea.style.display = isAvatar ? 'none' : '';
+    inputArea.hidden = isAvatar; // belt-and-braces in case any CSS shadows inline style
+    btnChat.classList.toggle('active', !isAvatar);
+    btnAvatar.classList.toggle('active', isAvatar);
   }
 
   const input = document.getElementById('messageInput');
@@ -457,13 +455,19 @@
   triggerEl.addEventListener('click', toggleWidget);
 
   // Copy the header's base64 gnome into other gnome slots (trigger pill,
-  // avatar coming-soon block) so we only carry the image once.
-  {
+  // avatar coming-soon block) so we only carry the image once. Waits for
+  // DOMContentLoaded when the document is still parsing so it runs after
+  // every target element exists.
+  function copyGnomeImage() {
     const src = document.querySelector('.brand-logo img')?.src;
-    if (src) {
-      document.querySelectorAll('.jeffrey-trigger-logo img, .avatar-coming-logo img')
-        .forEach(img => { img.src = src; });
-    }
+    if (!src) return;
+    document.querySelectorAll('.jeffrey-trigger-logo img, .avatar-coming-logo img')
+      .forEach(img => { img.src = src; });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', copyGnomeImage);
+  } else {
+    copyGnomeImage();
   }
 
   // Auto-welcome — on page load, after a short delay, open the widget and
